@@ -103,10 +103,10 @@ class Year(BaseModel):
 
 # mypy currently can't handle recursive types:
 # https://github.com/python/mypy/issues/731
-Paper = Annotated[  # type: ignore[misc]
+PaperSearchQuery = Annotated[  # type: ignore[misc]
     Union[
-        And['Paper'],  # type: ignore[misc]
-        Or['Paper'],  # type: ignore[misc]
+        And['PaperSearchQuery'],  # type: ignore[misc]
+        Or['PaperSearchQuery'],  # type: ignore[misc]
         Title,
         AuthorName,
         Journal,
@@ -117,16 +117,8 @@ Paper = Annotated[  # type: ignore[misc]
     Field(discriminator='tag')]
 
 
-And['Paper'].update_forward_refs()
-Or['Paper'].update_forward_refs()
-
-
-class PaperQuery(BaseModel):
-    tag: Literal['paper_query'] = 'paper_query'
-    query: Paper
-
-
-PaperQuery.update_forward_refs()   # TODO: is this necessary?
+And['PaperSearchQuery'].update_forward_refs()
+Or['PaperSearchQuery'].update_forward_refs()
 
 
 class Name(BaseModel):
@@ -136,56 +128,44 @@ class Name(BaseModel):
 
 # mypy currently can't handle recursive types:
 # https://github.com/python/mypy/issues/731
-Author = Annotated[  # type: ignore[misc]
+AuthorSearchQuery = Annotated[  # type: ignore[misc]
     Union[
-        And['Author'],  # type: ignore[misc]
-        Or['Author'],  # type: ignore[misc]
+        And['AuthorSearchQuery'],  # type: ignore[misc]
+        Or['AuthorSearchQuery'],  # type: ignore[misc]
         Name,
         Institution],
     Field(discriminator='tag')]
 
 
-And['Author'].update_forward_refs()
-Or['Author'].update_forward_refs()
+And['AuthorSearchQuery'].update_forward_refs()
+Or['AuthorSearchQuery'].update_forward_refs()
 
 
-class AuthorQuery(BaseModel):
-    tag: Literal['author_query'] = 'author_query'
-    query: Author
-
-
-AuthorQuery.update_forward_refs()   # TODO: is this necessary?
-
-
-class AuthorByIDQuery(BaseModel):
-    tag: Literal['author_by_id_query'] = 'author_by_id_query'
+class PaperDetailsQuery(BaseModel):
     id: str
 
 
-class CoauthorByIDQuery(BaseModel):
-    tag: Literal['coauthor_by_id_query'] = 'coauthor_by_id_query'
+class AuthorDetailsQuery(BaseModel):
     id: str
 
 
-Query = Union[PaperQuery, AuthorQuery, AuthorByIDQuery, CoauthorByIDQuery]
+class CoauthorQuery(BaseModel):
+    id: str
 
 # Test
 
 
 # d = {
-#     'tag': 'paper_query',
-#     'query': {
-#         'tag': 'and',
-#         'fields_': [
-#             {
-#                 'tag': 'year',
-#                 'operator': {
-#                     'tag': 'equal',
-#                     'value': 1996
-#                 }
+#     'tag': 'and',
+#     'fields_': [
+#         {
+#             'tag': 'year',
+#             'operator': {
+#                 'tag': 'equal',
+#                 'value': 1996
 #             }
-#         ]
-#     }
+#         }
+#     ]
 # }
 #
-# pq = PaperQuery(**d)
+# pq = PaperSearchQuery(**d)

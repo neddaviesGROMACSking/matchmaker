@@ -8,6 +8,3 @@ class PaperData(BaseModel):
 
 class AuthorData(BaseModel):
     pass
-
-
-Data = Union[PaperData, AuthorData]
