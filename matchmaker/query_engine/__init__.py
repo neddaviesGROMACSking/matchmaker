@@ -1,8 +1,7 @@
 from enum import Enum
 
-from .backends.pubmed import QueryEngine \
-        as PubMedQueryEngine
+from .backends.pubmed import PubMedBackend
 
 
 class Backends(Enum):
-    pubmed = PubMedQueryEngine
+    pubmed = PubMedBackend
