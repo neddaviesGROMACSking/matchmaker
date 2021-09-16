@@ -7,16 +7,11 @@ from matchmaker.query_engine.data_types import PaperData, AuthorData
 from matchmaker.query_engine.slightly_less_abstract import SlightlyLessAbstractQueryEngine
 from matchmaker.query_engine.backend import Backend
 
-
-
-def make_search_given_term(
-    term, 
-    db='pubmed', 
-    retmax:int = 10000, 
-    prefix= 'https://eutils.ncbi.nlm.nih.gov/entrez/eutils/'
-):
-    return f'{prefix}esearch.fcgi?db={db}&retmax={retmax}&term={term}'
-
+from urllib.parse import quote_plus
+from urllib.request import urlopen
+import xml.etree.ElementTree as xml_parse
+import xmltodict
+import requests
 test = '(Jeremy Green[Author]) AND (Test[Title/Abstract])'
 
 
@@ -67,19 +62,15 @@ class PaperSearchQueryEngine(
                 return f'("{start_year}"[Date - Publication])'
             else:
                 return f'("{start_year}"[Date - Publication] : "{end_year}"[Date - Publication])'
-        def make_title_term(title:str):
-            return f'({title}[Title])'
-        def make_abstract_term(abstract_phrase:str):
-            return f'({abstract_phrase}[Abstract])'
-        def make_institution_term(institution:str):
-            return f'({institution}[Affiliation])'
-        def make_author_term(name:str):
-            return f'({name}[Author])'
-        def make_journal_term(journal_name: str):
-            return f'({journal_name}[Journal])'
-        def make_keyword_term(keyword: str):
-            return f'({keyword}[Other Term])'
-        
+
+        def make_string_term(string, value, operator):
+            if operator == 'in' and len(value) > 4:
+                return f'({value}*[{string}])'
+            elif operator == 'in':
+                raise ValueError(f'Value {value} in section {string} too short for operator "in"')
+            else:
+                return f'({value}[{string}])'
+            
         query = query.dict()['query']
 
         def query_to_term(query):
@@ -92,27 +83,29 @@ class PaperSearchQueryEngine(
             elif query['tag'] == 'title':
                 operator = query['operator']
                 value = operator['value']
-                return make_title_term(value)
+                return make_string_term('Title', value, operator)
             elif query['tag'] == 'author':
                 operator = query['operator']
                 value = operator['value']
-                return make_author_term(value)
+                return make_string_term('Author', value, operator)
             elif query['tag'] == 'journal':
                 operator = query['operator']
                 value = operator['value']
-                return make_journal_term(journal)
+                return make_string_term('Journal', value, operator)
             elif query['tag'] == 'abstract':
                 operator = query['operator']
                 value = operator['value']
-                return make_abstract_term(value)
+                return make_string_term('Abstract', value, operator)
             elif query['tag'] == 'institution':
                 operator = query['operator']
                 value = operator['value']
-                return make_institution_term(value)
+                return make_string_term('Affiliation', value, operator)
+            
             elif query['tag'] == 'keyword':
                 operator = query['operator']
                 value = operator['value']
-                return make_keyword_term(value)
+                return make_string_term('Other Term', value, operator)
+            
             elif query['tag'] == 'year':
                 operator = query['operator']
                 if operator['tag'] =='equal':
@@ -138,8 +131,103 @@ class PaperSearchQueryEngine(
 
 
     def _run_native_query(self, query: PubMedPaperSearchQuery) -> List[PubMedPaperData]:
-        # TODO: implement this
-        pass
+        def make_search_given_term(
+            term, 
+            db='pubmed', 
+            retmax:int = 10000, 
+            prefix= 'https://eutils.ncbi.nlm.nih.gov/entrez/eutils/'
+        ):
+            return f'{prefix}esearch.fcgi?db={db}&retmax={retmax}&term={quote_plus(str(term))}'
+        
+        def make_fetch_given_ids(
+            id_list,
+            prefix= 'https://eutils.ncbi.nlm.nih.gov/entrez/eutils/'
+        ):
+            return f'{prefix}efetch.fcgi?db=pubmed&retmode=xml&id={",".join(id_list)}'
+
+        def make_cited_by_given_ids(
+            id_list,
+            prefix= 'https://eutils.ncbi.nlm.nih.gov/entrez/eutils/'
+        ):
+            #https://eutils.ncbi.nlm.nih.gov/entrez/eutils/elink.fcgi?dbfrom=pubmed&linkname=pubmed_pubmed_citedin&id=21876726
+            return f'{prefix}elink.fcgi?dbfrom=pubmed&linkname=pubmed_pubmed_citedin&'+'&'.join(id_list)
+        
+        def make_references_given_ids(
+            id_list,
+            prefix= 'https://eutils.ncbi.nlm.nih.gov/entrez/eutils/'
+        ):
+            #https://eutils.ncbi.nlm.nih.gov/entrez/eutils/elink.fcgi?dbfrom=pubmed&linkname=pubmed_pubmed_refs&id=24752654
+            return f'{prefix}elink.fcgi?dbfrom=pubmed&linkname=pubmed_pubmed_refs&'+'&'.join(id_list)
+
+        search_url = make_search_given_term(query.term)
+
+        #test = urlopen(search_url).read()
+        raw_out = requests.get(search_url).text
+        proc_out = xmltodict.parse(raw_out)
+        #print(raw_out)
+        results = proc_out['eSearchResult']
+
+        # Get metadata
+        count = results['Count']
+        ret_max = results['RetMax']
+        ret_start = results['RetStart']
+
+        id_list_outer = results['IdList']
+        id_list = id_list_outer['Id']
+
+        #print(id_list)
+        fetch_url = make_fetch_given_ids(id_list)
+
+        if len(id_list)>200:
+            raw_fetch_out = requests.post(make_fetch_given_ids(['']), {'id': id_list}).text
+        else:
+            raw_fetch_out = requests.get(fetch_url).text
+        
+        proc_out = xmltodict.parse(raw_fetch_out)
+        article_set = proc_out['PubmedArticleSet']['PubmedArticle']
+
+        import json
+        for counter, i in enumerate(article_set):
+            #if counter ==1:
+            article = i['MedlineCitation']['Article']
+            try:
+                keywords = i['MedlineCitation']['KeywordList']['Keyword']
+                keyword_text = [i['#text'] for i in keywords]
+            except:
+                pass
+            journal = article['Journal']
+            journal_title = journal['Title']
+            journal_title_abr = journal['ISOAbbreviation']
+            try:
+                year_pub = journal['JournalIssue']['PubDate']['Year']
+            except:
+                pass
+
+
+            title = article['ArticleTitle']
+            try:
+                abstract = article['Abstract']['AbstractText']
+            except:
+                pass
+
+            author_list = article['AuthorList']['Author']
+            if isinstance(author_list, list):
+                author_list_proc = [{j:k for j,k in i.items() if j == 'LastName' or j == 'ForeName' or j == 'Initials'} for i in author_list]
+                try:
+                    affliation = author_list[0]['AffiliationInfo']['Affiliation']
+                except:
+                    pass
+            else:
+                author_list_proc = [{j:k for j,k in author_list.items() if j == 'LastName' or j == 'ForeName' or j == 'Initials'}]
+                try:
+                    affliation = author_list['AffiliationInfo']['Affiliation']
+                except:
+                    pass
+            
+            print(json.dumps(author_list_proc,indent=2))
+                #print(i)
+            #print(counter)
+        
 
     def _post_process(self, query: PaperSearchQuery, data: List[PubMedPaperData]) -> List[PubMedPaperData]:
         # TODO: implement this

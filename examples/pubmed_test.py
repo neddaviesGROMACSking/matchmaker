@@ -3,13 +3,13 @@ from matchmaker.query_engine.query_types import PaperSearchQuery
 
 d = {
     'query':{
-        'tag': 'or',
+        'tag': 'and',
         'fields_': [
             {
                 'tag': 'author',
                 'operator': {
                     'tag': 'equal',
-                    'value': 'Jeremy Green'
+                    'value': 'M Todd'
                 }
             },
             {

@@ -9,6 +9,8 @@ python = "^3.9"
 pydantic = {git = "https://github.com/PrettyWood/pydantic.git", rev = "f/discriminated-union"}
 typer = "^0.4.0"
 mutate-function = "^0.1.0"
+xmltodict = "^0.12.0"
+requests = "^2.26.0"
 
 [tool.poetry.dev-dependencies]
 pytest = "^6.0.0"
