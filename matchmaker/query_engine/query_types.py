@@ -103,10 +103,12 @@ class Year(BaseModel):
 
 # mypy currently can't handle recursive types:
 # https://github.com/python/mypy/issues/731
-PaperSearchQuery = Annotated[  # type: ignore[misc]
+and_int = And['PaperSearchQueryInt']
+or_int = Or['PaperSearchQueryInt']
+PaperSearchQueryInt = Annotated[  # type: ignore[misc]
     Union[
-        And['PaperSearchQuery'],  # type: ignore[misc]
-        Or['PaperSearchQuery'],  # type: ignore[misc]
+        and_int,  # type: ignore[misc]
+        or_int,  # type: ignore[misc]
         Title,
         AuthorName,
         Journal,
@@ -116,9 +118,12 @@ PaperSearchQuery = Annotated[  # type: ignore[misc]
         Year],
     Field(discriminator='tag')]
 
+class PaperSearchQuery(BaseModel):
+    query: PaperSearchQueryInt
 
-And['PaperSearchQuery'].update_forward_refs()
-Or['PaperSearchQuery'].update_forward_refs()
+and_int.update_forward_refs()
+or_int.update_forward_refs()
+PaperSearchQuery.update_forward_refs()
 
 
 class Name(BaseModel):
@@ -152,20 +157,3 @@ class AuthorDetailsQuery(BaseModel):
 class CoauthorQuery(BaseModel):
     id: str
 
-# Test
-
-
-# d = {
-#     'tag': 'and',
-#     'fields_': [
-#         {
-#             'tag': 'year',
-#             'operator': {
-#                 'tag': 'equal',
-#                 'value': 1996
-#             }
-#         }
-#     ]
-# }
-#
-# pq = PaperSearchQuery(**d)
