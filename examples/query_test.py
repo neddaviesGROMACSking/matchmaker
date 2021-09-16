@@ -7,7 +7,7 @@ d = {
             {
                 'tag': 'year',
                 'operator': {
-                    'tag': 'equal',
+                    'tag': 'lt',
                     'value': 1996
                 }
             }
