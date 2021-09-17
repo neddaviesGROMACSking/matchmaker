@@ -204,23 +204,23 @@ class PaperSearchQueryEngine(
                     'collective_name': author_item['CollectiveName']
                 })
 
-        search_url = make_search_given_term(query.term)
+        def get_id_list_from_query(query):
+            search_url = make_search_given_term(query.term)
 
-        #test = urlopen(search_url).read()
-        raw_out = requests.get(search_url).text
-        proc_out = xmltodict.parse(raw_out)
-        results = proc_out['eSearchResult']
+            #test = urlopen(search_url).read()
+            raw_out = requests.get(search_url).text
+            proc_out = xmltodict.parse(raw_out)
+            results = proc_out['eSearchResult']
 
-        # Get metadata
-        count = results['Count']
-        ret_max = results['RetMax']
-        ret_start = results['RetStart']
+            # Get metadata
+            #count = results['Count']
+            #ret_max = results['RetMax']
+            #ret_start = results['RetStart']
 
-        id_list_outer = results['IdList']
-        id_list = id_list_outer['Id']
+            id_list_outer = results['IdList']
+            id_list = id_list_outer['Id']
+            return id_list
 
-        
-        # Initial Fetch
 
         def papers_from_id_list(id_list):
             fetch_url = make_fetch_given_ids(id_list)
@@ -382,11 +382,11 @@ class PaperSearchQueryEngine(
             cited_by_url = make_cited_by_given_ids(id_list)
             return get_linked_papers_given_url(cited_by_url)
         
+
+        id_list = get_id_list_from_query(query)
         papers = papers_from_id_list(id_list)
-        # Get references
         references_set = get_references_from_id_list(id_list)
-        # Get cited by
-        #cited_by = get_cited_by_from_id_list(id_list)
+        #cited_by_set = get_cited_by_from_id_list(id_list)
 
         for paper in papers:
             pubmed_id = paper.pubmed_id
