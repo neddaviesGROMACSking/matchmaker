@@ -1,5 +1,5 @@
 from pydantic import BaseModel
-from typing import List, Union, Literal
+from typing import List, Union, Literal, Optional, Any
 
 from matchmaker.query_engine.query_types import PaperSearchQuery, \
         AuthorSearchQuery, PaperDetailsQuery, AuthorDetailsQuery, CoauthorQuery
@@ -38,16 +38,47 @@ class PubMedCoauthorsQuery(BaseModel):
     # TODO: implement this
     pass
 
+class PubmedTopic(BaseModel):
+    descriptor: str
+    qualifier: Optional[Union[str,List[str]]] = None
+
+class PubmedIndividual(BaseModel):
+    last_name: str
+    fore_name: str
+    initials: str
+
+class PubmedCollective(BaseModel):
+    collective_name:str
+
+
+class PubmedAuthor(BaseModel):
+    __root__: Union[PubmedIndividual, PubmedCollective]
+
+class AbstractItem(BaseModel):
+    label: str
+    nlm_category: str
+    text: str
 
 class PubMedPaperData(BaseModel):
-    # TODO: implement this
-    pass
+    pubmed_id: str
+    title: str
+    year: Optional[int]
+    author_list: List[PubmedAuthor]
+    journal_title: str
+    journal_title_abr: str
+    institution: Optional[str]
+    keywords: Optional[List[str]]
+    topics: List[PubmedTopic]
+    abstract: Optional[Union[str, List[AbstractItem]]]
+    references: Optional[List[str]] = None
+    cited_by: Optional[List[str]] = None
+
+
 
 
 class PubMedAuthorData(BaseModel):
     # TODO: implement this
     pass
-
 
 def paper_from_native(data):
     raise NotImplementedError('TODO')
@@ -71,7 +102,7 @@ class PaperSearchQueryEngine(
             else:
                 return f'({value}[{string}])'
             
-        query = query.dict()['query']
+        query = query.dict()['__root__']
 
         def query_to_term(query):
             if query['tag'] == 'and':
@@ -159,12 +190,25 @@ class PaperSearchQueryEngine(
             #https://eutils.ncbi.nlm.nih.gov/entrez/eutils/elink.fcgi?dbfrom=pubmed&linkname=pubmed_pubmed_refs&id=24752654
             return f'{prefix}elink.fcgi?dbfrom=pubmed&linkname=pubmed_pubmed_refs&'+'&'.join(id_list)
 
+        def proc_author(
+            author_item
+        ):
+            if 'LastName' in author_item:
+                return PubmedAuthor.parse_obj({
+                    'last_name': author_item['LastName'], 
+                    'fore_name': author_item['ForeName'],
+                    'initials': author_item['Initials']
+                })
+            elif 'CollectiveName' in author_item:
+                return PubmedAuthor.parse_obj({
+                    'collective_name': author_item['CollectiveName']
+                })
+
         search_url = make_search_given_term(query.term)
 
         #test = urlopen(search_url).read()
         raw_out = requests.get(search_url).text
         proc_out = xmltodict.parse(raw_out)
-        #print(raw_out)
         results = proc_out['eSearchResult']
 
         # Get metadata
@@ -175,7 +219,8 @@ class PaperSearchQueryEngine(
         id_list_outer = results['IdList']
         id_list = id_list_outer['Id']
 
-        #print(id_list)
+
+        # Initial Fetch
         fetch_url = make_fetch_given_ids(id_list)
 
         if len(id_list)>200:
@@ -187,47 +232,94 @@ class PaperSearchQueryEngine(
         article_set = proc_out['PubmedArticleSet']['PubmedArticle']
 
         import json
+        papers =[]
         for counter, i in enumerate(article_set):
-            #if counter ==1:
-            article = i['MedlineCitation']['Article']
+            medline_citation=i['MedlineCitation']
+            pubmed_id = medline_citation['PMID']['#text']
+            final_structure= {}
+            article = medline_citation['Article']
             try:
-                keywords = i['MedlineCitation']['KeywordList']['Keyword']
+                keywords = medline_citation['KeywordList']['Keyword']
                 keyword_text = [i['#text'] for i in keywords]
             except:
-                pass
+                keywords = None
+                keyword_text=None
+            
+            topics = []
+            if 'MeshHeadingList' in medline_citation:
+                mesh_headings = medline_citation['MeshHeadingList']['MeshHeading']
+                for mesh_heading in mesh_headings:
+                    descriptor = mesh_heading['DescriptorName']['#text']
+                    if 'QualifierName' in mesh_heading:
+                        qualifier = mesh_heading['QualifierName']
+                        if isinstance(qualifier, list):
+                            new_qualifier = [i['#text'] for i in qualifier]
+                        else:
+                            new_qualifier = qualifier['#text']
+                    else:
+                        qualifier = None
+                    topics.append(
+                        PubmedTopic(descriptor= descriptor,qualifier = new_qualifier)
+                    )
+            
             journal = article['Journal']
             journal_title = journal['Title']
             journal_title_abr = journal['ISOAbbreviation']
             try:
                 year_pub = journal['JournalIssue']['PubDate']['Year']
             except:
-                pass
+                year_pub = None
 
 
             title = article['ArticleTitle']
             try:
                 abstract = article['Abstract']['AbstractText']
             except:
-                pass
+                abstract = None
+            if isinstance(abstract, list):
+                new_abstract = []
+                for i in abstract:
+                    item = AbstractItem(
+                        label = i['@Label'],
+                        nlm_category = i['@NlmCategory'],
+                        text = i['#text']
+                    )
+                    new_abstract.append(item)
+            else:
+                new_abstract = abstract
+
 
             author_list = article['AuthorList']['Author']
             if isinstance(author_list, list):
-                author_list_proc = [{j:k for j,k in i.items() if j == 'LastName' or j == 'ForeName' or j == 'Initials'} for i in author_list]
+                author_list_proc = [proc_author(i) for i in author_list]
                 try:
-                    affliation = author_list[0]['AffiliationInfo']['Affiliation']
+                    institution = author_list[0]['AffiliationInfo']['Affiliation']
                 except:
-                    pass
+                    institution = None
             else:
-                author_list_proc = [{j:k for j,k in author_list.items() if j == 'LastName' or j == 'ForeName' or j == 'Initials'}]
+                author_list_proc = [proc_author(author_list)]
                 try:
-                    affliation = author_list['AffiliationInfo']['Affiliation']
+                    institution = author_list['AffiliationInfo']['Affiliation']
                 except:
-                    pass
-            
-            print(json.dumps(author_list_proc,indent=2))
-                #print(i)
-            #print(counter)
-        
+                    institution = None
+
+
+            paper_data = PubMedPaperData(
+                pubmed_id = pubmed_id,
+                title = title, 
+                year = year_pub,
+                author_list = author_list_proc,
+                journal_title = journal_title,
+                journal_title_abr = journal_title_abr,
+                institution = institution,
+                keywords = keyword_text,
+                topics = topics,
+                abstract = new_abstract
+            )
+            papers.append(paper_data)
+            #print(json.dumps(paper_data.dict(),indent=2))
+        from pprint import pprint
+        pprint(papers)
 
     def _post_process(self, query: PaperSearchQuery, data: List[PubMedPaperData]) -> List[PubMedPaperData]:
         # TODO: implement this

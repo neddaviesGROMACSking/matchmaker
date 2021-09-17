@@ -103,9 +103,11 @@ class Year(BaseModel):
 
 # mypy currently can't handle recursive types:
 # https://github.com/python/mypy/issues/731
-and_int = And['PaperSearchQueryInt']
-or_int = Or['PaperSearchQueryInt']
-PaperSearchQueryInt = Annotated[  # type: ignore[misc]
+and_int = And['PaperSearchQuery']
+or_int = Or['PaperSearchQuery']
+
+class PaperSearchQuery(BaseModel):
+    __root__: Annotated[  # type: ignore[misc]
     Union[
         and_int,  # type: ignore[misc]
         or_int,  # type: ignore[misc]
@@ -117,9 +119,6 @@ PaperSearchQueryInt = Annotated[  # type: ignore[misc]
         Keyword,
         Year],
     Field(discriminator='tag')]
-
-class PaperSearchQuery(BaseModel):
-    query: PaperSearchQueryInt
 
 and_int.update_forward_refs()
 or_int.update_forward_refs()
