@@ -12,7 +12,6 @@ from urllib.request import urlopen
 import xml.etree.ElementTree as xml_parse
 import xmltodict
 import requests
-test = '(Jeremy Green[Author]) AND (Test[Title/Abstract])'
 
 
 class PubMedPaperSearchQuery(BaseModel):
@@ -180,14 +179,12 @@ class PaperSearchQueryEngine(
             id_list,
             prefix= 'https://eutils.ncbi.nlm.nih.gov/entrez/eutils/'
         ):
-            #https://eutils.ncbi.nlm.nih.gov/entrez/eutils/elink.fcgi?dbfrom=pubmed&linkname=pubmed_pubmed_citedin&id=21876726
             return f'{prefix}elink.fcgi?dbfrom=pubmed&linkname=pubmed_pubmed_citedin&id='+'&id='.join(id_list)
         
         def make_references_given_ids(
             id_list,
             prefix= 'https://eutils.ncbi.nlm.nih.gov/entrez/eutils/'
         ):
-            #https://eutils.ncbi.nlm.nih.gov/entrez/eutils/elink.fcgi?dbfrom=pubmed&linkname=pubmed_pubmed_refs&id=24752654
             return f'{prefix}elink.fcgi?dbfrom=pubmed&linkname=pubmed_pubmed_refs&id='+'&id='.join(id_list)
 
         def proc_author(
@@ -207,18 +204,18 @@ class PaperSearchQueryEngine(
         def get_id_list_from_query(query):
             search_url = make_search_given_term(query.term)
 
-            #test = urlopen(search_url).read()
             raw_out = requests.get(search_url).text
-            proc_out = xmltodict.parse(raw_out)
-            results = proc_out['eSearchResult']
+            proc_out = xml_parse.fromstring(raw_out)
+            id_list = []
+            for result in proc_out:
+                if result.tag == 'IdList':
+                    id_list = id_list + [i.text for i in result.iterfind('Id')]
 
             # Get metadata
             #count = results['Count']
             #ret_max = results['RetMax']
             #ret_start = results['RetStart']
 
-            id_list_outer = results['IdList']
-            id_list = id_list_outer['Id']
             return id_list
 
 
@@ -229,8 +226,9 @@ class PaperSearchQueryEngine(
                 raw_fetch_out = requests.post(make_fetch_given_ids(['']), {'id': id_list}).text
             else:
                 raw_fetch_out = requests.get(fetch_url).text
-            
+            #proc_out = xml_parse.fromstring(raw_fetch_out)
             proc_out = xmltodict.parse(raw_fetch_out)
+
             article_set = proc_out['PubmedArticleSet']['PubmedArticle']
 
             import json
