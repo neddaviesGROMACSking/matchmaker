@@ -8,7 +8,7 @@ d = {
             'tag': 'author',
             'operator': {
                 'tag': 'equal',
-                'value': 'M Todd'
+                'value': 'Jeremy Green'
             }
         },
         {

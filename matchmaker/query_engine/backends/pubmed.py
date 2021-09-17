@@ -55,9 +55,9 @@ class PubmedAuthor(BaseModel):
     __root__: Union[PubmedIndividual, PubmedCollective]
 
 class AbstractItem(BaseModel):
-    label: str
-    nlm_category: str
-    text: str
+    label: Optional[str]
+    nlm_category: Optional[str]
+    text: Optional[str]
 
 class PubMedPaperData(BaseModel):
     pubmed_id: str
@@ -181,14 +181,14 @@ class PaperSearchQueryEngine(
             prefix= 'https://eutils.ncbi.nlm.nih.gov/entrez/eutils/'
         ):
             #https://eutils.ncbi.nlm.nih.gov/entrez/eutils/elink.fcgi?dbfrom=pubmed&linkname=pubmed_pubmed_citedin&id=21876726
-            return f'{prefix}elink.fcgi?dbfrom=pubmed&linkname=pubmed_pubmed_citedin&'+'&'.join(id_list)
+            return f'{prefix}elink.fcgi?dbfrom=pubmed&linkname=pubmed_pubmed_citedin&id='+'&id='.join(id_list)
         
         def make_references_given_ids(
             id_list,
             prefix= 'https://eutils.ncbi.nlm.nih.gov/entrez/eutils/'
         ):
             #https://eutils.ncbi.nlm.nih.gov/entrez/eutils/elink.fcgi?dbfrom=pubmed&linkname=pubmed_pubmed_refs&id=24752654
-            return f'{prefix}elink.fcgi?dbfrom=pubmed&linkname=pubmed_pubmed_refs&'+'&'.join(id_list)
+            return f'{prefix}elink.fcgi?dbfrom=pubmed&linkname=pubmed_pubmed_refs&id='+'&id='.join(id_list)
 
         def proc_author(
             author_item
@@ -219,107 +219,186 @@ class PaperSearchQueryEngine(
         id_list_outer = results['IdList']
         id_list = id_list_outer['Id']
 
-
-        # Initial Fetch
-        fetch_url = make_fetch_given_ids(id_list)
-
-        if len(id_list)>200:
-            raw_fetch_out = requests.post(make_fetch_given_ids(['']), {'id': id_list}).text
-        else:
-            raw_fetch_out = requests.get(fetch_url).text
         
-        proc_out = xmltodict.parse(raw_fetch_out)
-        article_set = proc_out['PubmedArticleSet']['PubmedArticle']
+        # Initial Fetch
 
-        import json
-        papers =[]
-        for counter, i in enumerate(article_set):
-            medline_citation=i['MedlineCitation']
-            pubmed_id = medline_citation['PMID']['#text']
-            final_structure= {}
-            article = medline_citation['Article']
-            try:
-                keywords = medline_citation['KeywordList']['Keyword']
-                keyword_text = [i['#text'] for i in keywords]
-            except:
-                keywords = None
-                keyword_text=None
+        def papers_from_id_list(id_list):
+            fetch_url = make_fetch_given_ids(id_list)
             
-            topics = []
-            if 'MeshHeadingList' in medline_citation:
-                mesh_headings = medline_citation['MeshHeadingList']['MeshHeading']
-                for mesh_heading in mesh_headings:
-                    descriptor = mesh_heading['DescriptorName']['#text']
-                    if 'QualifierName' in mesh_heading:
-                        qualifier = mesh_heading['QualifierName']
-                        if isinstance(qualifier, list):
-                            new_qualifier = [i['#text'] for i in qualifier]
+            if len(id_list)>200:
+                raw_fetch_out = requests.post(make_fetch_given_ids(['']), {'id': id_list}).text
+            else:
+                raw_fetch_out = requests.get(fetch_url).text
+            
+            proc_out = xmltodict.parse(raw_fetch_out)
+            article_set = proc_out['PubmedArticleSet']['PubmedArticle']
+
+            import json
+            papers =[]
+            for counter, i in enumerate(article_set):
+                medline_citation=i['MedlineCitation']
+                pubmed_id = medline_citation['PMID']['#text']
+                final_structure= {}
+                article = medline_citation['Article']
+                try:
+                    keywords = medline_citation['KeywordList']['Keyword']
+                    keyword_text = [i['#text'] for i in keywords]
+                except:
+                    keywords = None
+                    keyword_text=None
+                
+                topics = []
+                if 'MeshHeadingList' in medline_citation:
+                    mesh_headings = medline_citation['MeshHeadingList']['MeshHeading']
+                    for mesh_heading in mesh_headings:
+                        descriptor = mesh_heading['DescriptorName']['#text']
+                        if 'QualifierName' in mesh_heading:
+                            qualifier = mesh_heading['QualifierName']
+                            if isinstance(qualifier, list):
+                                new_qualifier = [i['#text'] for i in qualifier]
+                            else:
+                                new_qualifier = qualifier['#text']
                         else:
-                            new_qualifier = qualifier['#text']
+                            new_qualifier = None
+                        topics.append(
+                            PubmedTopic(descriptor= descriptor,qualifier = new_qualifier)
+                        )
+                
+                journal = article['Journal']
+                journal_title = journal['Title']
+                journal_title_abr = journal['ISOAbbreviation']
+                try:
+                    year_pub = journal['JournalIssue']['PubDate']['Year']
+                except:
+                    year_pub = None
+
+
+                title = article['ArticleTitle']
+                try:
+                    abstract = article['Abstract']['AbstractText']
+                except:
+                    abstract = None
+                if isinstance(abstract, list):
+                    new_abstract = []
+                    for i in abstract:
+                        if 'NlmCategory' in i:
+                            nlm_cat = i['NlmCategory']
+                        else:
+                            nlm_cat = None
+                        if '@Label' in i:
+                            label = i['@Label']
+                        else:
+                            label = None
+                        if '#text' in i:
+                            text = i['#text']
+                        else:
+                            text = None
+                        item = AbstractItem(
+                            label = label,
+                            nlm_category = nlm_cat,
+                            text = text
+                        )
+                        new_abstract.append(item)
+                else:
+                    new_abstract = str(abstract)
+
+
+                author_list = article['AuthorList']['Author']
+                if isinstance(author_list, list):
+                    author_list_proc = [proc_author(i) for i in author_list]
+                    try:
+                        institution = author_list[0]['AffiliationInfo']['Affiliation']
+                    except:
+                        institution = None
+                else:
+                    author_list_proc = [proc_author(author_list)]
+                    try:
+                        institution = author_list['AffiliationInfo']['Affiliation']
+                    except:
+                        institution = None
+
+                print(title)
+                paper_data = PubMedPaperData(
+                    pubmed_id = pubmed_id,
+                    title = title, 
+                    year = year_pub,
+                    author_list = author_list_proc,
+                    journal_title = journal_title,
+                    journal_title_abr = journal_title_abr,
+                    institution = institution,
+                    keywords = keyword_text,
+                    topics = topics,
+                    abstract = new_abstract
+                )
+                papers.append(paper_data)
+                #print(json.dumps(paper_data.dict(),indent=2))
+            return papers
+
+
+        
+        #print(ref_url)
+        def get_linked_papers_given_url(url):
+            raw_references = requests.get(url).text
+            proc_ref = xmltodict.parse(raw_references)
+            link_set = proc_ref['eLinkResult']['LinkSet']
+
+            id_mapper = {}
+            ref_fetch_list = []
+            for link in link_set:
+                id_value = link['IdList']['Id']
+                if 'LinkSetDb' in link:
+                    link_set_db = link['LinkSetDb']['Link']
+                    link_proc = []
+                    if isinstance(link_set_db, list):
+                        link_proc = [i['Id'] for i in link_set_db]
                     else:
-                        qualifier = None
-                    topics.append(
-                        PubmedTopic(descriptor= descriptor,qualifier = new_qualifier)
-                    )
-            
-            journal = article['Journal']
-            journal_title = journal['Title']
-            journal_title_abr = journal['ISOAbbreviation']
-            try:
-                year_pub = journal['JournalIssue']['PubDate']['Year']
-            except:
-                year_pub = None
+                        link_proc = [link_set_db['Id']]
+                    #link_proc = [i['Id'] for i in link_set_db]
+                    id_mapper[id_value] = link_proc
+                    ref_fetch_list = ref_fetch_list + link_proc
+                else:
+                    id_mapper[id_value] = None
+            unique_ref_fetch_list = list(set(ref_fetch_list))
+            ref_papers = papers_from_id_list(unique_ref_fetch_list)
+            ref_paper_index = {i.pubmed_id: i for i in ref_papers}
+
+            id_mapper_papers = {}
+            for search_id, id_list in id_mapper.items():
+                if id_list is not None:
+                    sub_papers = []
+                    for sub_id in id_list:
+                        paper = ref_paper_index[sub_id]
+                        sub_papers.append(paper)
+                    id_mapper_papers[search_id] = sub_papers
+                else:
+                    id_mapper_papers[search_id] = None
+            return id_mapper_papers
+        
+        def get_references_from_id_list(id_list):
+            ref_url = make_references_given_ids(id_list)
+            return get_linked_papers_given_url(ref_url)
+        
+        def get_cited_by_from_id_list(id_list):
+            cited_by_url = make_cited_by_given_ids(id_list)
+            return get_linked_papers_given_url(cited_by_url)
+        
+        papers = papers_from_id_list(id_list)
+        # Get references
+        references_set = get_references_from_id_list(id_list)
+        # Get cited by
+        #cited_by = get_cited_by_from_id_list(id_list)
+
+        for paper in papers:
+            pubmed_id = paper.pubmed_id
+            references = references_set[pubmed_id]
+            paper.references = references
+            #print(paper.dict())
+        #print(ref_paper_index)
+        #print(references)
 
 
-            title = article['ArticleTitle']
-            try:
-                abstract = article['Abstract']['AbstractText']
-            except:
-                abstract = None
-            if isinstance(abstract, list):
-                new_abstract = []
-                for i in abstract:
-                    item = AbstractItem(
-                        label = i['@Label'],
-                        nlm_category = i['@NlmCategory'],
-                        text = i['#text']
-                    )
-                    new_abstract.append(item)
-            else:
-                new_abstract = abstract
-
-
-            author_list = article['AuthorList']['Author']
-            if isinstance(author_list, list):
-                author_list_proc = [proc_author(i) for i in author_list]
-                try:
-                    institution = author_list[0]['AffiliationInfo']['Affiliation']
-                except:
-                    institution = None
-            else:
-                author_list_proc = [proc_author(author_list)]
-                try:
-                    institution = author_list['AffiliationInfo']['Affiliation']
-                except:
-                    institution = None
-
-
-            paper_data = PubMedPaperData(
-                pubmed_id = pubmed_id,
-                title = title, 
-                year = year_pub,
-                author_list = author_list_proc,
-                journal_title = journal_title,
-                journal_title_abr = journal_title_abr,
-                institution = institution,
-                keywords = keyword_text,
-                topics = topics,
-                abstract = new_abstract
-            )
-            papers.append(paper_data)
-            #print(json.dumps(paper_data.dict(),indent=2))
         from pprint import pprint
-        pprint(papers)
+        #pprint(references)
 
     def _post_process(self, query: PaperSearchQuery, data: List[PubMedPaperData]) -> List[PubMedPaperData]:
         # TODO: implement this
