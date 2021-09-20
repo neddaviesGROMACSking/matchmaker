@@ -8,7 +8,6 @@ from matchmaker.query_engine.slightly_less_abstract import SlightlyLessAbstractQ
 from matchmaker.query_engine.backend import Backend
 
 from urllib.parse import quote_plus
-from urllib.request import urlopen
 import xml.etree.ElementTree as xml_parse
 import xmltodict
 import requests
@@ -24,8 +23,7 @@ class PubMedAuthorSearchQuery(BaseModel):
 
 
 class PubMedPaperDetailsQuery(BaseModel):
-    # TODO: implement this
-    pass
+    pubmed_ids: List[str]
 
 
 class PubMedAuthorDetailsQuery(BaseModel):
@@ -36,6 +34,8 @@ class PubMedAuthorDetailsQuery(BaseModel):
 class PubMedCoauthorsQuery(BaseModel):
     # TODO: implement this
     pass
+
+
 
 class PubmedTopic(BaseModel):
     descriptor: str
@@ -81,6 +81,12 @@ class PubMedAuthorData(BaseModel):
 
 def paper_from_native(data):
     raise NotImplementedError('TODO')
+
+
+def make_doi_search_term(doi_list):
+    new_doi_list = [doi + '[Location ID]' for doi in doi_list]
+    return ' OR '.join(new_doi_list)
+
 
 
 class PaperSearchQueryEngine(
@@ -187,22 +193,9 @@ class PaperSearchQueryEngine(
         ):
             return f'{prefix}elink.fcgi?dbfrom=pubmed&linkname=pubmed_pubmed_refs&id='+'&id='.join(id_list)
 
-        def proc_author(
-            author_item
-        ):
-            if 'LastName' in author_item:
-                return PubmedAuthor.parse_obj({
-                    'last_name': author_item['LastName'], 
-                    'fore_name': author_item['ForeName'],
-                    'initials': author_item['Initials']
-                })
-            elif 'CollectiveName' in author_item:
-                return PubmedAuthor.parse_obj({
-                    'collective_name': author_item['CollectiveName']
-                })
 
-        def get_id_list_from_query(query):
-            search_url = make_search_given_term(query.term)
+        def get_id_list_from_term(term):
+            search_url = make_search_given_term(term)
 
             raw_out = requests.get(search_url).text
             proc_out = xml_parse.fromstring(raw_out)
@@ -379,7 +372,8 @@ class PaperSearchQueryEngine(
 
         from pprint import pprint
 
-        id_list = get_id_list_from_query(query)
+        id_list = get_id_list_from_term(query.term)
+        print(len(id_list))
         papers = papers_from_id_list(id_list)
         references_set = get_references_from_id_list(id_list)
         cited_by_set = get_cited_by_from_id_list(id_list)

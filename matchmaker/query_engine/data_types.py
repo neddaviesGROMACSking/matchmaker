@@ -15,6 +15,18 @@ class PaperData(BaseModel):
 
 
 class AuthorData(BaseModel):
-    name: str
-    affiliation_current: str
-    affiliations: List[str]
+    class Name(BaseModel):
+        surname: str
+        given_names: Optional[str] = None
+        initials: Optional[str] = None
+    class Subject(BaseModel):
+        name: str
+        paper_frequency: int
+    class Institution(BaseModel):
+        name: str
+        id: Optional[str] = None
+    preferred_name: Name
+    name_variants: List[Name]
+    subjects: List[Subject]
+    institution_current: Institution
+    other_institutions: List[Institution] = []
