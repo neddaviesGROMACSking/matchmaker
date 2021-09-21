@@ -1,4 +1,4 @@
-from matchmaker.query_engine.backends.scopus import test_scopus_search, test_scopus_get_institutions, test_scopus_get_authors
+from matchmaker.query_engine.backends.scopus_api import test_scopus_search, test_scopus_get_institutions, test_scopus_get_authors
 import json
 results = test_scopus_search()
 #print(json.dumps([i.dict() for i in results], indent=2))
