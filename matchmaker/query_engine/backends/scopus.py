@@ -9,12 +9,130 @@ from matchmaker.query_engine.backend import Backend
 
 from urllib.parse import quote_plus
 import xml.etree.ElementTree as xml_parse
-import xmltodict
 import requests
-#from atoma import parse_atom_bytes
 import json
+
+
+def extract_id(identifier):
+    return identifier[identifier.find(':')+1:len(identifier)]
+
+
+
+class ScopusAffiliationData(BaseModel):
+    afid: str
+    name: str
+    city: Optional[str]
+    country: Optional[str]
+    doc_count: Optional[int] = None
+    variants: Optional[List[str]] = None
+
+def test_scopus_get_institutions():
+    #http://api.elsevier.com:80/content/search/affiliation?start=0&count=5&query=affil(university)
+    test_data = requests.get('https://dev.elsevier.com/payloads/search/affiliationSearchResp.json').text
+    dict_struct = json.loads(test_data)
+    results = dict_struct['search-results']['entry']
+    new_results = []
+    for result in results:
+        identifier = result['dc:identifier']
+        ident = extract_id(identifier)
+        affiliation_name = result['affiliation-name']
+        affiliation_variants = [i['$'] for i in result['name-variant']]
+        city = result['city']
+        country = result['country']
+        doc_count = result['document-count']
+        new_results.append(
+            ScopusAffiliationData.parse_obj({
+                'afid': ident,
+                'name': affiliation_name,
+                'variants': affiliation_variants,
+                'city': city,
+                'country': country,
+                'doc_count': doc_count
+            })
+        )
+    return new_results
+
+
+
+class ScopusAuthorQuery(BaseModel):
+    institution_id: str
+
+class Subject(BaseModel):
+    name: str
+    frequency: str
+    abbr: str
+
+class Name(BaseModel):
+    surname: str
+    initials: Optional[str] = None
+    given_name: Optional[str] = None
+
+
+class ScopusAuthorData(BaseModel):
+    auth_id: str
+    preferred_name: Name
+    variants: List[Name]
+    doc_count: int
+    subjects: List[Subject]
+    current_affiliation: ScopusAffiliationData
+
+def test_scopus_get_authors():
+    test_data = requests.get('https://dev.elsevier.com/payloads/search/authorSearchResp.json').text
+    dict_struct = json.loads(test_data)
+    results = dict_struct['search-results']['entry']
+    new_results = []
+    for result in results:
+        identifier = extract_id(result['dc:identifier'])
+        preferred_name = result['preferred-name']
+        proc_pref_name = Name.parse_obj(preferred_name)
+
+        variants = result['name-variant']
+        proc_variants = []
+        for variant in variants:
+            proc_variants.append(Name.parse_obj(variant))
+        
+        doc_count = result['document-count']
+
+        new_subjects = []
+        subjects = result['subject']
+        for subject in subjects:
+            freq = subject['@frequency']
+            abbr = subject['@abbr']
+            name = subject['$']
+            new_subjects.append(
+                Subject(
+                    name = name,
+                    frequency = freq,
+                    abbr = abbr
+                )
+            )
+        affil_current = result['affiliation-current']
+        afid = affil_current['affiliation-id']
+        affil_name = affil_current['affiliation-name']
+        affil_city = affil_current['affiliation-city']
+        affil_country = affil_current['affiliation-country']
+        new_affil_current = ScopusAffiliationData(
+            afid = afid,
+            name = affil_name,
+            city = affil_city,
+            country = affil_country
+        )
+        new_results.append(
+            ScopusAuthorData.parse_obj({
+                'auth_id': identifier,
+                'preferred_name': proc_pref_name,
+                'variants': proc_variants,
+                'doc_count': doc_count,
+                'subjects': new_subjects,
+                'current_affiliation': new_affil_current
+            })
+        )
+
+    return new_results
+
+
 #https://dev.elsevier.com/sc_search_tips.html
-class ScopusSearchQuery(BaseModel):
+class ScopusPaperQuery(BaseModel):
     all: str
     affil: str
     af_id: str
@@ -30,18 +148,6 @@ class ScopusSearchQuery(BaseModel):
     title: str
 
 class ScopusPaperData(BaseModel):
-    pass
-
-
-class ScopusAffiliationData(BaseModel):
-    afid: str
-    name: str
-    city: Optional[str]
-    country: Optional[str]
-    doc_count: Optional[int] = None
-    variants: Optional[List[str]] = None
-
-class ScopusSearchResult(BaseModel):
     class Author(BaseModel):
         authid: str
         authname: str
@@ -117,7 +223,7 @@ def test_scopus_search():
             keywords = result['authkeywords']
         else:
             keywords = None
-        new_results.append(ScopusSearchResult.parse_obj({
+        new_results.append(ScopusPaperData.parse_obj({
             'title': title,
             'creator': creator,
             'scopus_id': scopus_id,
@@ -128,127 +234,4 @@ def test_scopus_search():
             'description': description,
             'affiliations': proc_affiliations
         }))
-    return new_results
-
-class ScopusAuthorQuery(BaseModel):
-    institution_id: str
-
-"""
-def test_scopus_get_authors_from_institution():
-    #https://api.elsevier.com/analytics/scival/author/institutionId/508175?httpAccept=application/json&offset=0&yearRange=5yrs
-    test_data = requests.get('https://dev.elsevier.com/payloads/scival/authorsByInstitutionResp.json').text
-    dict_struc = json.loads(test_data)
-    authors = dict_struc['authors']
-    #print(authors)
-    new_authors = []
-    for author in authors:
-        new_authors.append(ScopusAuthorData(
-            auth_id = author['id'],
-            name = author['name']
-        ))
-    return new_authors
-"""
-
-
-def extract_id(identifier):
-    return identifier[identifier.find(':')+1:len(identifier)]
-
-def test_scopus_get_institution_id():
-    #http://api.elsevier.com:80/content/search/affiliation?start=0&count=5&query=affil(university)
-    test_data = requests.get('https://dev.elsevier.com/payloads/search/affiliationSearchResp.json').text
-    dict_struct = json.loads(test_data)
-    results = dict_struct['search-results']['entry']
-    new_results = []
-    for result in results:
-        identifier = result['dc:identifier']
-        ident = extract_id(identifier)
-        affiliation_name = result['affiliation-name']
-        affiliation_variants = [i['$'] for i in result['name-variant']]
-        city = result['city']
-        country = result['country']
-        doc_count = result['document-count']
-        #print(identifier)
-        new_results.append(
-            ScopusAffiliationData.parse_obj({
-                'afid': ident,
-                'name': affiliation_name,
-                'variants': affiliation_variants,
-                'city': city,
-                'country': country,
-                'doc_count': doc_count
-            })
-        )
-    return new_results
-
-class Subject(BaseModel):
-    name: str
-    frequency: str
-    abbr: str
-
-class Name(BaseModel):
-    surname: str
-    initials: Optional[str] = None
-    given_name: Optional[str] = None
-
-
-class ScopusAuthorData(BaseModel):
-    auth_id: str
-    preferred_name: Name
-    variants: List[Name]
-    doc_count: int
-    subjects: List[Subject]
-    current_affiliation: ScopusAffiliationData
-
-def test_scopus_get_authors():
-    test_data = requests.get('https://dev.elsevier.com/payloads/search/authorSearchResp.json').text
-    dict_struct = json.loads(test_data)
-    results = dict_struct['search-results']['entry']
-    new_results = []
-    for result in results:
-        identifier = extract_id(result['dc:identifier'])
-        preferred_name = result['preferred-name']
-        proc_pref_name = Name.parse_obj(preferred_name)
-
-        variants = result['name-variant']
-        proc_variants = []
-        for variant in variants:
-            proc_variants.append(Name.parse_obj(variant))
-        
-        doc_count = result['document-count']
-
-        new_subjects = []
-        subjects = result['subject']
-        for subject in subjects:
-            freq = subject['@frequency']
-            abbr = subject['@abbr']
-            name = subject['$']
-            new_subjects.append(
-                Subject(
-                    name = name,
-                    frequency = freq,
-                    abbr = abbr
-                )
-            )
-        affil_current = result['affiliation-current']
-        afid = affil_current['affiliation-id']
-        affil_name = affil_current['affiliation-name']
-        affil_city = affil_current['affiliation-city']
-        affil_country = affil_current['affiliation-country']
-        new_affil_current = ScopusAffiliationData(
-            afid = afid,
-            name = affil_name,
-            city = affil_city,
-            country = affil_country
-        )
-        new_results.append(
-            ScopusAuthorData.parse_obj({
-                'auth_id': identifier,
-                'preferred_name': proc_pref_name,
-                'variants': proc_variants,
-                'doc_count': doc_count,
-                'subjects': new_subjects,
-                'current_affiliation': new_affil_current
-            })
-        )
-
     return new_results
