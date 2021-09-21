@@ -11,12 +11,15 @@ from urllib.parse import quote_plus
 import xml.etree.ElementTree as xml_parse
 import requests
 import json
-
+from enum import Enum
 
 def extract_id(identifier):
     return identifier[identifier.find(':')+1:len(identifier)]
 
 
+class ScopusAffiliationQuery(BaseModel):
+    afid: str
+    affil: str
 
 class ScopusAffiliationData(BaseModel):
     afid: str
@@ -54,8 +57,42 @@ def test_scopus_get_institutions():
 
 
 
+
+class SubjectArea(Enum):
+    agriculture = 'AGRI'
+    arts = 'ARTS'
+    biochemistry = 'BIOC'
+    business = 'BUSI'
+    chem_engineering = 'CENG'
+    chemistry = 'CHEM'
+    computer_sci = 'COMP'
+    decision_sci = 'DECI'
+    dentistry = 'DENT'
+    earth_and_planetary = 'EART'
+    economics = 'ECON'
+    energy = 'ENER'
+    engineering = 'ENGI'
+    environmental_sci = 'ENVI'
+    health_professions = 'HEAL'
+    immunology = 'IMMU'
+    materials = 'MATE'
+    mathematics = 'MATH'
+    medicine = 'MEDI'
+    neuroscience = 'NEUR'
+    nursing = 'NURS'
+    pharmacology = 'PHAR'
+    physics = 'PHYS'
+    psychology = 'PSYC'
+    social_sciences = 'SOCI'
+    veterinary = 'VETE'
+    multidisciplinary = 'MULT'
+
 class ScopusAuthorQuery(BaseModel):
-    institution_id: str
+    affiliation_id: str
+    affiliation: str
+    author_id: str
+    subject_area: SubjectArea
+
 
 class Subject(BaseModel):
     name: str
@@ -66,7 +103,6 @@ class Name(BaseModel):
     surname: str
     initials: Optional[str] = None
     given_name: Optional[str] = None
-
 
 class ScopusAuthorData(BaseModel):
     auth_id: str
@@ -235,3 +271,4 @@ def test_scopus_search():
             'affiliations': proc_affiliations
         }))
     return new_results
+
