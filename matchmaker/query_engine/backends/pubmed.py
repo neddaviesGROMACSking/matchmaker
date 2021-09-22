@@ -6,21 +6,29 @@ from matchmaker.query_engine.query_types import PaperSearchQuery, \
 from matchmaker.query_engine.data_types import PaperData, AuthorData
 from matchmaker.query_engine.slightly_less_abstract import SlightlyLessAbstractQueryEngine
 from matchmaker.query_engine.backend import Backend
-from matchmaker.query_engine.backends.pubmed_api import PubMedPaperData, elink_on_id_list, efetch_on_id_list, esearch_on_query, efetch_on_elink
+from matchmaker.query_engine.backends.pubmed_api import PubMedPaperData, PubmedAuthor, elink_on_id_list, efetch_on_id_list, esearch_on_query, efetch_on_elink
 
-
-
-from matchmaker.query_engine.query_types import And, Or, Title, AuthorName, Journal, Abstract, Institution, Keyword, Year
-from typing import Annotated
+from matchmaker.query_engine.query_types import And, Or, Title, AuthorName, Journal, Abstract, Institution, Keyword, Year, StringPredicate
+from typing import Annotated, Literal
 from pprint import pprint
 and_int = And['PubMedPaperSearchQuery']
 or_int = Or['PubMedPaperSearchQuery']
-    
+
+class Pmid(BaseModel):
+    tag: Literal['Pmid'] = 'Pmid'
+    operator: StringPredicate
+
+class ELocationID(BaseModel):
+    tag: Literal['ELocationID'] = 'ELocationID'
+    operator: StringPredicate
+
 class PubMedPaperSearchQuery(BaseModel):
     __root__: Annotated[  # type: ignore[misc]
     Union[
         and_int,  # type: ignore[misc]
         or_int,  # type: ignore[misc]
+        Pmid,
+        ELocationID,
         Title,
         AuthorName,
         Journal,
@@ -34,17 +42,20 @@ and_int.update_forward_refs()
 or_int.update_forward_refs()
 PubMedPaperSearchQuery.update_forward_refs()
 
-#class PubMedPaperSearchQuery(BaseModel):
-#    term: str
+class PubMedPaperDetailsQuery(BaseModel):
+    pubmed_ids: List[str]
+
+
+class PubmedAuthorID(PubmedAuthor):
+    pass
 
 
 class PubMedAuthorSearchQuery(BaseModel):
+
     # TODO: implement this
     pass
 
 
-class PubMedPaperDetailsQuery(BaseModel):
-    pubmed_ids: List[str]
 
 
 class PubMedAuthorDetailsQuery(BaseModel):
@@ -111,6 +122,9 @@ class AuthorSearchQueryEngine(
         pass
 
     def _run_native_query(self, query: PubMedAuthorSearchQuery) -> List[PubMedAuthorData]:
+        id_list = esearch_on_query(query)
+        print(len(id_list))
+        papers = efetch_on_id_list(id_list)
         # TODO: implement this
         pass
 

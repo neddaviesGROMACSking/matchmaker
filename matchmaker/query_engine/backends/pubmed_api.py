@@ -6,6 +6,95 @@ from pydantic import BaseModel
 from typing import List, Union, Optional
 import json
 
+from postal.expand import expand_address
+from postal.parser import parse_address
+
+
+def extract_postcodes(institution):
+    def find_all(a_str, sub):
+        start = 0
+        while True:
+            start = a_str.find(sub, start)
+            if start == -1: return
+            yield start
+            start += len(sub)
+    
+    def remove_from_phrase(phrase, to_remove):
+        starts = [i[0] for i in to_remove]
+        starts.sort()
+        ends = [i[1] for i in to_remove]
+        ends.sort()
+        real_starts = [0] + ends
+        real_ends = starts + [len(phrase)]
+        if len(phrase) in real_starts:
+            real_starts.remove(len(phrase))
+            real_ends.remove(len(phrase))
+        phrase_parts = []
+        for counter, real_start in enumerate(real_starts):
+            real_end = real_ends[counter]
+            phrase_parts.append(phrase[real_start: real_end])
+        new_phrase = ''.join(phrase_parts)
+
+        return new_phrase
+    words_to_remove = [
+        'email',
+        'electronic address'
+    ]
+    at_locations =list(find_all(institution, '@'))
+    emails = []
+    for at_location in at_locations:
+        if at_location != -1:
+            words = institution.split(' ')
+            for word in words:
+                if '@' in word:
+                    words_to_remove.append(word)
+                    emails.append(word)
+    
+    to_remove = []
+    for i in words_to_remove:
+        start_phrase_loc = institution.lower().find(i)
+        if start_phrase_loc != -1:
+            end_phrase_loc = start_phrase_loc + len(i)
+            to_remove.append((start_phrase_loc, end_phrase_loc))
+    new_institution = remove_from_phrase(institution, to_remove)
+    institution_split = new_institution.split(',')
+    combined_sections = []
+    for section in institution_split:
+        expanded = expand_address(section)
+        if expanded == []:
+            to_parse = section
+        else:
+            to_parse = expanded[0]
+        parsed_section = parse_address(to_parse)
+        combined_sections = combined_sections + parsed_section
+    postcodes = [i[0] for i in combined_sections if i[1] == 'postcode']
+    if postcodes == []:
+        expanded = expand_address(new_institution)
+        if expanded == []:
+            to_parse = section
+        else:
+            to_parse = expanded[0]
+        parsed_section = parse_address(to_parse)
+        postcodes = [i[0] for i in parsed_section if i[1] == 'postcode']
+    if postcodes == []:
+        expanded = expand_address(institution)
+        if expanded == []:
+            to_parse = section
+        else:
+            to_parse = expanded[0]
+        parsed_section = parse_address(to_parse)
+        postcodes = [i[0] for i in parsed_section if i[1] == 'postcode']
+    if postcodes == []:
+        parsed_section = parse_address(new_institution)
+        postcodes = [i[0] for i in parsed_section if i[1] == 'postcode']
+    if postcodes == []:
+        parsed_section = parse_address(institution)
+        postcodes = [i[0] for i in parsed_section if i[1] == 'postcode']
+    new_postcodes = list(set(postcodes))
+    if new_postcodes == []:
+        new_postcodes = None
+    return new_postcodes
+
 def inspect_xml_dict(i):
     return xmltodict.parse(
         bytes(
@@ -26,17 +115,22 @@ class PubmedTopic(BaseModel):
     descriptor: str
     qualifier: Optional[Union[str,List[str]]] = None
 
-class PubmedIndividual(BaseModel):
+class PubmedAuthorBase(BaseModel):
+    institution: Optional[str]
+    postcodes: Optional[List[str]]
+
+class PubmedIndividual(PubmedAuthorBase):
     last_name: str
     fore_name: str
     initials: str
 
-class PubmedCollective(BaseModel):
+class PubmedCollective(PubmedAuthorBase):
     collective_name:str
 
 
 class PubmedAuthor(BaseModel):
     __root__: Union[PubmedIndividual, PubmedCollective]
+
 
 class AbstractItem(BaseModel):
     label: Optional[str]
@@ -57,7 +151,6 @@ class PubMedPaperData(BaseModel):
     author_list: List[PubmedAuthor]
     journal_title: str
     journal_title_abr: str
-    institution: Optional[str]
     keywords: Optional[List[str]]
     topics: List[PubmedTopic]
     abstract: Optional[Union[str, List[AbstractItem]]]
@@ -287,10 +380,19 @@ def efetch_on_id_list(id_list):
         author_list_proc = []
         for author in author_list:
             last_name_elem = author.find('LastName')
+            affiliation_info = author.find("AffiliationInfo")
+            if affiliation_info is not None:
+                institution = affiliation_info.find('Affiliation').text
+                postcodes = extract_postcodes(institution)
+            else:
+                institution = None
+                postcodes = None
             if last_name_elem is None:
                 collective = author.find('CollectiveName').text
                 author_final = PubmedAuthor.parse_obj({
-                    'collective_name': collective
+                    'collective_name': collective,
+                    'institution': institution,
+                    'postcodes': postcodes
                 })
             else:
                 last_name = last_name_elem.text
@@ -299,15 +401,13 @@ def efetch_on_id_list(id_list):
                 author_final = PubmedAuthor.parse_obj({
                     'last_name': last_name, 
                     'fore_name': fore_name,
-                    'initials': initials
+                    'initials': initials,
+                    'institution': institution,
+                    'postcodes': postcodes
                 })
             author_list_proc.append(author_final)            
             
-        affiliation_info_list = [i for i in article.iter("AffiliationInfo")]
-        if len(affiliation_info_list) ==1:
-            institution = affiliation_info_list[0].find('Affiliation').text
-        else:
-            institution = None
+
         
         elocations = article.findall('ELocationID')
         if elocations is not None:

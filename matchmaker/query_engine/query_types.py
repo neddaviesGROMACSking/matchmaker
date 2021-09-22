@@ -3,7 +3,7 @@ from pydantic.generics import GenericModel
 from typing import Annotated, Generic, List, Literal, Type, TypeVar, Union
 from collections.abc import Container
 from numbers import Real
-
+from matchmaker.query_engine.id_types import PaperID
 QueryType = TypeVar('QueryType')  # TODO: restrict to query types only
 
 
@@ -146,7 +146,7 @@ Or['AuthorSearchQuery'].update_forward_refs()
 
 
 class PaperDetailsQuery(BaseModel):
-    id: str
+    id: PaperID
 
 
 class AuthorDetailsQuery(BaseModel):
