@@ -4,6 +4,23 @@ from urllib.parse import quote_plus
 import xml.etree.ElementTree as xml_parse
 from pydantic import BaseModel
 from typing import List, Union, Optional
+import json
+
+def inspect_xml_dict(i):
+    return xmltodict.parse(
+        bytes(
+            xml_parse.tostring(
+                i, 
+                encoding='utf8', 
+                method='xml'
+            )
+        ).decode('unicode_escape')
+    )
+def inspect_xml(i):
+    return json.dumps(
+        inspect_xml_dict(i),
+        indent=2
+    )
 
 class PubmedTopic(BaseModel):
     descriptor: str
@@ -26,8 +43,15 @@ class AbstractItem(BaseModel):
     nlm_category: Optional[str]
     text: Optional[str]
 
+class IdSet(BaseModel):
+    pubmed: str
+    doi: Optional[str]
+    pii: Optional[str]
+    pmc: Optional[str]
+    mid: Optional[str]
+
 class PubMedPaperData(BaseModel):
-    pubmed_id: str
+    paper_id: IdSet
     title: str
     year: Optional[int]
     author_list: List[PubmedAuthor]
@@ -44,7 +68,7 @@ class PubMedPaperData(BaseModel):
 
 
 # ESearch
-def get_id_list_from_query(query):
+def esearch_on_query(query):
     def query_to_term(query):
         def make_year_term(start_year:int = 1000, end_year:int = 3000):
             if start_year==end_year:
@@ -139,7 +163,7 @@ def get_id_list_from_query(query):
 
 
 # Elink
-def get_linked_paper_ids(id_list, linkname):
+def elink_on_id_list(id_list, linkname):
     def make_elink_url(
             id_list,
             linkname,
@@ -173,7 +197,7 @@ def get_linked_paper_ids(id_list, linkname):
 
 
 # EFetch
-def papers_from_id_list(id_list):
+def efetch_on_id_list(id_list):
     def make_fetch_given_ids(
         id_list,
         prefix= 'https://eutils.ncbi.nlm.nih.gov/entrez/eutils/'
@@ -188,11 +212,18 @@ def papers_from_id_list(id_list):
         raw_fetch_out = requests.get(fetch_url).text
     proc_out = xml_parse.fromstring(raw_fetch_out)
     papers = []
-    for i in proc_out:
-        medline_citation = i.find('MedlineCitation')
-        pubmed_id = medline_citation.find('PMID').text
-        article = medline_citation.find('Article')
 
+    for i in proc_out:
+
+        medline_citation = i.find('MedlineCitation')
+        pubmed_data = i.find('PubmedData')
+
+        article_id_list = pubmed_data.find('ArticleIdList')
+        articles = article_id_list.findall('ArticleId')
+        ids_available= {i.attrib['IdType']: i.text for i in article_id_list}
+
+        #pubmed_id = medline_citation.find('PMID').text
+        article = medline_citation.find('Article')
         keywordlist = medline_citation.find('KeywordList')
         if keywordlist is not None:
             keyword_text = [i.text for i in keywordlist.findall('Keyword')]
@@ -277,10 +308,46 @@ def papers_from_id_list(id_list):
             institution = affiliation_info_list[0].find('Affiliation').text
         else:
             institution = None
-
         
+        elocations = article.findall('ELocationID')
+        if elocations is not None:
+            elocation_dict = {i.attrib['EIdType']: i.text for i in elocations}
+        else:
+            elocation_dict = {}
+
+        new_ids = {}
+        for id_name,id_value in elocation_dict.items():
+            if id_name not in ids_available:
+                ids_available[id_name] = id_value
+
+        pubmed_id = ids_available['pubmed']
+        if 'doi' in ids_available:
+            doi = ids_available['doi']
+        else:
+            doi = None
+        if 'pii' in ids_available:
+            pii = ids_available['pii']
+        else:
+            pii = None
+        if 'pmc' in ids_available:
+            pmc = ids_available['pmc']
+        else:
+            pmc = None
+        if 'mid' in ids_available:
+            mid = ids_available['mid']
+        else:
+            mid = None
+        
+        id_set = IdSet(
+            pubmed = pubmed_id,
+            doi = doi,
+            pii = pii,
+            pmc = pmc,
+            mid = mid
+        )
+
         paper_data = PubMedPaperData(
-            pubmed_id = pubmed_id,
+            paper_id = id_set,
             title = title, 
             year = year_pub,
             author_list = author_list_proc,
@@ -293,3 +360,17 @@ def papers_from_id_list(id_list):
         )
         papers.append(paper_data)
     return papers
+
+
+def efetch_on_elink(id_list, linkname):
+    unique_fetch_list, id_mapper = elink_on_id_list(id_list, linkname)
+    sub_papers = efetch_on_id_list(unique_fetch_list)
+    sub_paper_index = {i.paper_id.pubmed: i for i in sub_papers}
+
+    id_mapper_papers = {}
+    for search_id, id_list in id_mapper.items():
+        if id_list is not None:
+            id_mapper_papers[search_id] = [sub_paper_index[sub_id] for sub_id in id_list]
+        else:
+            id_mapper_papers[search_id] = None
+    return id_mapper_papers

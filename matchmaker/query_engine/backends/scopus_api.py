@@ -190,7 +190,7 @@ class ScopusPaperData(BaseModel):
         surname: str
         initials: str
         given_name: Optional[str] = None
-
+    doi: Optional[str]
     title: str
     creator: str
     scopus_id: str
@@ -218,6 +218,8 @@ def test_scopus_search():
         cover_display_date = result['prism:coverDisplayDate']
         if 'prism:doi' in result:
             doi = result['prism:doi']
+        else:
+            doi = None
         description = result['dc:description']
 
         proc_affiliations = []
@@ -266,6 +268,7 @@ def test_scopus_search():
             'publication': publication,
             'cover_date': cover_date,
             'cover_display_date': cover_display_date,
+            'doi': doi,
             'authors': proc_authors,
             'description': description,
             'affiliations': proc_affiliations

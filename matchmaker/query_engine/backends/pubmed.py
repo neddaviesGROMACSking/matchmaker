@@ -6,7 +6,7 @@ from matchmaker.query_engine.query_types import PaperSearchQuery, \
 from matchmaker.query_engine.data_types import PaperData, AuthorData
 from matchmaker.query_engine.slightly_less_abstract import SlightlyLessAbstractQueryEngine
 from matchmaker.query_engine.backend import Backend
-from matchmaker.query_engine.backends.pubmed_api import PubMedPaperData, get_linked_paper_ids, papers_from_id_list, get_id_list_from_query
+from matchmaker.query_engine.backends.pubmed_api import PubMedPaperData, elink_on_id_list, efetch_on_id_list, esearch_on_query, efetch_on_elink
 
 
 
@@ -81,33 +81,14 @@ class PaperSearchQueryEngine(
 
 
     def _run_native_query(self, query: PubMedPaperSearchQuery) -> List[PubMedPaperData]:        
-        def get_linked_papers_given_url(id_list, linkname):
-            unique_ref_fetch_list, id_mapper = get_linked_paper_ids(id_list, linkname)
-
-            ref_papers = papers_from_id_list(unique_ref_fetch_list)
-            ref_paper_index = {i.pubmed_id: i for i in ref_papers}
-
-            id_mapper_papers = {}
-            for search_id, id_list in id_mapper.items():
-                if id_list is not None:
-                    sub_papers = []
-                    for sub_id in id_list:
-                        paper = ref_paper_index[sub_id]
-                        sub_papers.append(paper)
-                    id_mapper_papers[search_id] = sub_papers
-                else:
-                    id_mapper_papers[search_id] = None
-            return id_mapper_papers
-
-
-        id_list = get_id_list_from_query(query)
+        id_list = esearch_on_query(query)
         print(len(id_list))
-        papers = papers_from_id_list(id_list)
-        references_set = get_linked_papers_given_url(id_list, 'pubmed_pubmed_refs')
-        cited_by_set = get_linked_papers_given_url(id_list, 'pubmed_pubmed_citedin')
+        papers = efetch_on_id_list(id_list)
+        references_set = efetch_on_elink(id_list, 'pubmed_pubmed_refs')
+        cited_by_set = efetch_on_elink(id_list, 'pubmed_pubmed_citedin')
 
         for paper in papers:
-            pubmed_id = paper.pubmed_id
+            pubmed_id = paper.paper_id.pubmed
             paper.references = references_set[pubmed_id]
             paper.cited_by = cited_by_set[pubmed_id]
             #pprint(paper.dict())
