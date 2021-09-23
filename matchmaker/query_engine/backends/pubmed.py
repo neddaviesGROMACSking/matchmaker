@@ -6,41 +6,17 @@ from matchmaker.query_engine.query_types import PaperSearchQuery, \
 from matchmaker.query_engine.data_types import PaperData, AuthorData
 from matchmaker.query_engine.slightly_less_abstract import SlightlyLessAbstractQueryEngine
 from matchmaker.query_engine.backend import Backend
-from matchmaker.query_engine.backends.pubmed_api import PubMedPaperData, PubmedAuthor, elink_on_id_list, efetch_on_id_list, esearch_on_query, efetch_on_elink
+from matchmaker.query_engine.backends.pubmed_api import PubMedESearchQuery, MeshTopic, PubMedPaperData, PubmedAuthor, elink_on_id_list, efetch_on_id_list, esearch_on_query, efetch_on_elink
 
 from matchmaker.query_engine.query_types import And, Or, Title, AuthorName, Journal, Abstract, Institution, Keyword, Year, StringPredicate
 from typing import Annotated, Literal
 from pprint import pprint
-and_int = And['PubMedPaperSearchQuery']
-or_int = Or['PubMedPaperSearchQuery']
 
-class Pmid(BaseModel):
-    tag: Literal['Pmid'] = 'Pmid'
-    operator: StringPredicate
 
-class ELocationID(BaseModel):
-    tag: Literal['ELocationID'] = 'ELocationID'
-    operator: StringPredicate
+class PubMedPaperSearchQuery(PubMedESearchQuery):
+    pass
 
-class PubMedPaperSearchQuery(BaseModel):
-    __root__: Annotated[  # type: ignore[misc]
-    Union[
-        and_int,  # type: ignore[misc]
-        or_int,  # type: ignore[misc]
-        Pmid,
-        ELocationID,
-        Title,
-        AuthorName,
-        Journal,
-        Abstract,
-        Institution,
-        Keyword,
-        Year],
-    Field(discriminator='tag')]
 
-and_int.update_forward_refs()
-or_int.update_forward_refs()
-PubMedPaperSearchQuery.update_forward_refs()
 
 class PubMedPaperDetailsQuery(BaseModel):
     pubmed_ids: List[str]
@@ -49,13 +25,23 @@ class PubMedPaperDetailsQuery(BaseModel):
 class PubmedAuthorID(PubmedAuthor):
     pass
 
+and_int = And['PubMedAuthorSearchQuery']
+or_int = Or['PubMedAuthorSearchQuery']
 
 class PubMedAuthorSearchQuery(BaseModel):
+    __root__: Annotated[
+    Union[
+        and_int,
+        or_int,
+        AuthorName,
+        Institution,
+        MeshTopic
+    ],
+    Field(discriminator='tag')]
 
-    # TODO: implement this
-    pass
-
-
+and_int.update_forward_refs()
+or_int.update_forward_refs()
+PubMedAuthorSearchQuery.update_forward_refs()
 
 
 class PubMedAuthorDetailsQuery(BaseModel):
@@ -92,7 +78,7 @@ class PaperSearchQueryEngine(
 
 
     def _run_native_query(self, query: PubMedPaperSearchQuery) -> List[PubMedPaperData]:        
-        id_list = esearch_on_query(query)
+        id_list = esearch_on_query(query).pubmed_id_list
         print(len(id_list))
         papers = efetch_on_id_list(id_list)
         references_set = efetch_on_elink(id_list, 'pubmed_pubmed_refs')
@@ -122,7 +108,7 @@ class AuthorSearchQueryEngine(
         pass
 
     def _run_native_query(self, query: PubMedAuthorSearchQuery) -> List[PubMedAuthorData]:
-        id_list = esearch_on_query(query)
+        id_list = esearch_on_query(query).pubmed_id_list
         print(len(id_list))
         papers = efetch_on_id_list(id_list)
         # TODO: implement this

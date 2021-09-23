@@ -2,13 +2,14 @@ import requests
 import xmltodict
 from urllib.parse import quote_plus
 import xml.etree.ElementTree as xml_parse
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from typing import List, Union, Optional
 import json
 
 from postal.expand import expand_address
 from postal.parser import parse_address
-
+from matchmaker.query_engine.query_types import And, Or, Title, AuthorName, Journal, Abstract, Institution, Keyword, Year, StringPredicate
+from typing import Annotated, Literal, Tuple
 
 def extract_postcodes(institution):
     def find_all(a_str, sub):
@@ -57,43 +58,59 @@ def extract_postcodes(institution):
             end_phrase_loc = start_phrase_loc + len(i)
             to_remove.append((start_phrase_loc, end_phrase_loc))
     new_institution = remove_from_phrase(institution, to_remove)
-    institution_split = new_institution.split(',')
-    combined_sections = []
-    for section in institution_split:
-        expanded = expand_address(section)
-        if expanded == []:
-            to_parse = section
-        else:
-            to_parse = expanded[0]
-        parsed_section = parse_address(to_parse)
-        combined_sections = combined_sections + parsed_section
-    postcodes = [i[0] for i in combined_sections if i[1] == 'postcode']
-    if postcodes == []:
+
+    def method0(new_institution):
+        institution_split = new_institution.split(',')
+        combined_sections = []
+        for section in institution_split:
+            expanded = expand_address(section)
+            if expanded == []:
+                to_parse = section
+            else:
+                to_parse = expanded[0]
+            parsed_section = parse_address(to_parse)
+            combined_sections = combined_sections + parsed_section
+        #print(combined_sections)
+        return combined_sections
+        #postcodes = [i[0] for i in combined_sections if i[1] == 'postcode']
+        #return postcodes
+    """
+    def method1(new_institution):
         expanded = expand_address(new_institution)
         if expanded == []:
-            to_parse = section
+            to_parse = new_institution
         else:
             to_parse = expanded[0]
         parsed_section = parse_address(to_parse)
-        postcodes = [i[0] for i in parsed_section if i[1] == 'postcode']
-    if postcodes == []:
-        expanded = expand_address(institution)
-        if expanded == []:
-            to_parse = section
-        else:
-            to_parse = expanded[0]
-        parsed_section = parse_address(to_parse)
-        postcodes = [i[0] for i in parsed_section if i[1] == 'postcode']
-    if postcodes == []:
+        return parsed_section
+        #postcodes = [i[0] for i in parsed_section if i[1] == 'postcode']
+        #return postcodes
+    
+    def method2(new_institution):
         parsed_section = parse_address(new_institution)
-        postcodes = [i[0] for i in parsed_section if i[1] == 'postcode']
-    if postcodes == []:
-        parsed_section = parse_address(institution)
-        postcodes = [i[0] for i in parsed_section if i[1] == 'postcode']
-    new_postcodes = list(set(postcodes))
-    if new_postcodes == []:
-        new_postcodes = None
-    return new_postcodes
+        return parsed_section
+        #postcodes = [i[0] for i in parsed_section if i[1] == 'postcode']
+        #return postcodes
+    """
+    processed = method0(new_institution)
+    proc_emails = [(i, 'email') for i in emails]
+    combined_proc = processed + proc_emails
+    #method0a = method0(new_institution)
+    #method0b = method0(institution)
+    #method1a = method1(new_institution)
+    #method1b = method1(institution)
+    #method2a = method2(new_institution)
+    #method2b = method2(institution)
+
+    reduced_combined_proc = []
+    for i in combined_proc:
+        if i not in reduced_combined_proc:
+            reduced_combined_proc.append(i)
+    
+    if reduced_combined_proc == []:
+        reduced_combined_proc = None
+    #print(reduced_combined_proc)
+    return reduced_combined_proc
 
 def inspect_xml_dict(i):
     return xmltodict.parse(
@@ -111,13 +128,61 @@ def inspect_xml(i):
         indent=2
     )
 
+#### E Search query def ####
+
+and_int = And['PubMedESearchQuery']
+or_int = Or['PubMedESearchQuery']
+
+class Pmid(BaseModel):
+    tag: Literal['Pmid'] = 'Pmid'
+    operator: StringPredicate
+
+class ELocationID(BaseModel):
+    tag: Literal['ELocationID'] = 'ELocationID'
+    operator: StringPredicate
+
+class MeshTopic(BaseModel):
+    tag: Literal['MeshTopic'] = 'MeshTopic'
+    operator: StringPredicate
+
+class PubMedESearchQuery(BaseModel):
+    __root__: Annotated[  # type: ignore[misc]
+    Union[
+        and_int,  # type: ignore[misc]
+        or_int,  # type: ignore[misc]
+        Pmid,
+        ELocationID,
+        MeshTopic,
+        Title,
+        AuthorName,
+        Journal,
+        Abstract,
+        Institution,
+        Keyword,
+        Year
+    ],
+    Field(discriminator='tag')]
+
+and_int.update_forward_refs()
+or_int.update_forward_refs()
+PubMedESearchQuery.update_forward_refs()
+
+#### End E Search query def ####
+
+class PubmedESearchData(BaseModel):
+    pubmed_id_list: List[str]
+    count: int
+    ret_max: int
+    ret_start: int
+
+#### E Fetch paper def ####
 class PubmedTopic(BaseModel):
     descriptor: str
     qualifier: Optional[Union[str,List[str]]] = None
 
 class PubmedAuthorBase(BaseModel):
     institution: Optional[str]
-    postcodes: Optional[List[str]]
+    proc_institution: Optional[List[Tuple[str, str]]]
 
 class PubmedIndividual(PubmedAuthorBase):
     last_name: str
@@ -157,7 +222,7 @@ class PubMedPaperData(BaseModel):
     references: Optional[List[str]] = None
     cited_by: Optional[List[str]] = None
 
-
+#### End E Fetch paper def ####
 
 
 # ESearch
@@ -245,13 +310,22 @@ def esearch_on_query(query):
     for result in proc_out:
         if result.tag == 'IdList':
             id_list = id_list + [i.text for i in result.iterfind('Id')]
+        elif result.tag == 'Count':
+            count = result.text
+        elif result.tag == 'RetMax':
+            ret_max = result.text
+        elif result.tag == 'RetStart':
+            ret_start = result.text
 
     # Get metadata
-    #count = results['Count']
-    #ret_max = results['RetMax']
-    #ret_start = results['RetStart']
 
-    return id_list
+
+    return PubmedESearchData(
+        pubmed_id_list = id_list,
+        count = count,
+        ret_max = ret_max,
+        ret_start = ret_start
+    )
 
 
 
@@ -305,7 +379,6 @@ def efetch_on_id_list(id_list):
         raw_fetch_out = requests.get(fetch_url).text
     proc_out = xml_parse.fromstring(raw_fetch_out)
     papers = []
-
     for i in proc_out:
 
         medline_citation = i.find('MedlineCitation')
@@ -383,16 +456,16 @@ def efetch_on_id_list(id_list):
             affiliation_info = author.find("AffiliationInfo")
             if affiliation_info is not None:
                 institution = affiliation_info.find('Affiliation').text
-                postcodes = extract_postcodes(institution)
+                proc_institution = extract_postcodes(institution)
             else:
                 institution = None
-                postcodes = None
+                proc_institution = None
             if last_name_elem is None:
                 collective = author.find('CollectiveName').text
                 author_final = PubmedAuthor.parse_obj({
                     'collective_name': collective,
                     'institution': institution,
-                    'postcodes': postcodes
+                    'proc_institution': proc_institution
                 })
             else:
                 last_name = last_name_elem.text
@@ -403,7 +476,7 @@ def efetch_on_id_list(id_list):
                     'fore_name': fore_name,
                     'initials': initials,
                     'institution': institution,
-                    'postcodes': postcodes
+                    'proc_institution': proc_institution
                 })
             author_list_proc.append(author_final)            
             
