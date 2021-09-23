@@ -3,10 +3,16 @@ from typing import Generic, Type, TypeVar
 
 from matchmaker.query_engine.abstract import AbstractQueryEngine
 
+class AbstractNativeQuery:
+    def _count_api_calls(self):
+        raise NotImplementedError('Calling method on abstract base class')
+    def _count_api_calls_by_method(self, method: str):
+        raise NotImplementedError('Calling method on abstract base class')
+
 
 Query = TypeVar('Query')
 Data = TypeVar('Data')
-NativeQuery = TypeVar('NativeQuery')
+NativeQuery = TypeVar('NativeQuery', bound=AbstractNativeQuery)
 NativeData = TypeVar('NativeData')
 
 
