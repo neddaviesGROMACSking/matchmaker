@@ -9,7 +9,7 @@ import json
 from postal.expand import expand_address
 from postal.parser import parse_address
 from matchmaker.query_engine.query_types import And, Or, Title, AuthorName, Journal, Abstract, Institution, Keyword, Year, StringPredicate
-from typing import Annotated, Literal, Tuple
+from typing import Annotated, Literal, Tuple, Dict
 
 def process_institution(institution):
     def remove_emails_from_phrase(initial_phrase):
@@ -107,8 +107,8 @@ def inspect_xml(i):
 
 #### E Search query def ####
 
-and_int = And['PubMedESearchQuery']
-or_int = Or['PubMedESearchQuery']
+and_int = And['PubmedESearchQuery']
+or_int = Or['PubmedESearchQuery']
 
 class Pmid(BaseModel):
     tag: Literal['Pmid'] = 'Pmid'
@@ -122,7 +122,7 @@ class MeshTopic(BaseModel):
     tag: Literal['MeshTopic'] = 'MeshTopic'
     operator: StringPredicate
 
-class PubMedESearchQuery(BaseModel):
+class PubmedESearchQuery(BaseModel):
     __root__: Annotated[  # type: ignore[misc]
     Union[
         and_int,  # type: ignore[misc]
@@ -142,7 +142,7 @@ class PubMedESearchQuery(BaseModel):
 
 and_int.update_forward_refs()
 or_int.update_forward_refs()
-PubMedESearchQuery.update_forward_refs()
+PubmedESearchQuery.update_forward_refs()
 
 #### End E Search query def ####
 
@@ -152,58 +152,8 @@ class PubmedESearchData(BaseModel):
     ret_max: int
     ret_start: int
 
-#### E Fetch paper def ####
-class PubmedTopic(BaseModel):
-    descriptor: str
-    qualifier: Optional[Union[str,List[str]]] = None
-
-class PubmedAuthorBase(BaseModel):
-    institution: Optional[str]
-    proc_institution: Optional[List[Tuple[str, str]]]
-
-class PubmedIndividual(PubmedAuthorBase):
-    last_name: str
-    fore_name: str
-    initials: str
-
-class PubmedCollective(PubmedAuthorBase):
-    collective_name:str
-
-
-class PubmedAuthor(BaseModel):
-    __root__: Union[PubmedIndividual, PubmedCollective]
-
-
-class AbstractItem(BaseModel):
-    label: Optional[str]
-    nlm_category: Optional[str]
-    text: Optional[str]
-
-class IdSet(BaseModel):
-    pubmed: str
-    doi: Optional[str]
-    pii: Optional[str]
-    pmc: Optional[str]
-    mid: Optional[str]
-
-class PubMedPaperData(BaseModel):
-    paper_id: IdSet
-    title: str
-    year: Optional[int]
-    author_list: List[PubmedAuthor]
-    journal_title: str
-    journal_title_abr: str
-    keywords: Optional[List[str]]
-    topics: List[PubmedTopic]
-    abstract: Optional[Union[str, List[AbstractItem]]]
-    references: Optional[List[str]] = None
-    cited_by: Optional[List[str]] = None
-
-#### End E Fetch paper def ####
-
-
 # ESearch
-def esearch_on_query(query):
+def esearch_on_query(query: PubmedESearchQuery) -> PubmedESearchData:
     def query_to_term(query):
         def make_year_term(start_year:int = 1000, end_year:int = 3000):
             if start_year==end_year:
@@ -304,23 +254,29 @@ def esearch_on_query(query):
         ret_start = ret_start
     )
 
+class PubmedELinkQuery(BaseModel):
+    pubmed_id_list: List[str]
+    linkname: str
 
+class PubmedELinkData(BaseModel):
+    id_mapper: Dict[str, Optional[List[str]]]
 
 # Elink
-def elink_on_id_list(id_list, linkname):
+def elink_on_id_list(query: PubmedELinkQuery) -> PubmedELinkData:
     def make_elink_url(
             id_list,
             linkname,
             prefix= 'https://eutils.ncbi.nlm.nih.gov/entrez/eutils/'
         ):
             return f'{prefix}elink.fcgi?dbfrom=pubmed&linkname={linkname}&id='+'&id='.join(id_list)
+    id_list = query.pubmed_id_list
+    linkname = query.linkname
     url = make_elink_url(id_list, linkname)
     raw_references = requests.get(url).text
     proc_ref = xmltodict.parse(raw_references)
     link_set = proc_ref['eLinkResult']['LinkSet']
 
     id_mapper = {}
-    ref_fetch_list = []
     for link in link_set:
         id_value = link['IdList']['Id']
         if 'LinkSetDb' in link:
@@ -331,23 +287,75 @@ def elink_on_id_list(id_list, linkname):
             else:
                 link_proc = [link_set_db['Id']]
             id_mapper[id_value] = link_proc
-            ref_fetch_list = ref_fetch_list + link_proc
         else:
             id_mapper[id_value] = None
-    unique_ref_fetch_list = list(set(ref_fetch_list))
-    return unique_ref_fetch_list, id_mapper
+    return PubmedELinkData(id_mapper = id_mapper)
 
 
 
+
+
+class PubmedEFetchQuery(BaseModel):
+    pubmed_id_list: List[str]
+
+
+#### E Fetch paper def ####
+class PubmedTopic(BaseModel):
+    descriptor: str
+    qualifier: Optional[Union[str,List[str]]] = None
+
+class PubmedAuthorBase(BaseModel):
+    institution: Optional[str]
+    proc_institution: Optional[List[Tuple[str, str]]]
+
+class PubmedIndividual(PubmedAuthorBase):
+    last_name: str
+    fore_name: str
+    initials: str
+
+class PubmedCollective(PubmedAuthorBase):
+    collective_name:str
+
+
+class PubmedAuthor(BaseModel):
+    __root__: Union[PubmedIndividual, PubmedCollective]
+
+
+class AbstractItem(BaseModel):
+    label: Optional[str]
+    nlm_category: Optional[str]
+    text: Optional[str]
+
+class IdSet(BaseModel):
+    pubmed: str
+    doi: Optional[str]
+    pii: Optional[str]
+    pmc: Optional[str]
+    mid: Optional[str]
+
+class PubmedEFetchData(BaseModel):
+    paper_id: IdSet
+    title: str
+    year: Optional[int]
+    author_list: List[PubmedAuthor]
+    journal_title: str
+    journal_title_abr: str
+    keywords: Optional[List[str]]
+    topics: List[PubmedTopic]
+    abstract: Optional[Union[str, List[AbstractItem]]]
+    references: Optional[List[str]] = None
+    cited_by: Optional[List[str]] = None
+
+#### End E Fetch paper def ####
 
 # EFetch
-def efetch_on_id_list(id_list):
+def efetch_on_id_list(query: PubmedEFetchQuery) -> List[PubmedEFetchData]:
     def make_fetch_given_ids(
         id_list,
         prefix= 'https://eutils.ncbi.nlm.nih.gov/entrez/eutils/'
     ):
         return f'{prefix}efetch.fcgi?db=pubmed&retmode=xml&id={",".join(id_list)}'
-
+    id_list = query.pubmed_id_list
     fetch_url = make_fetch_given_ids(id_list)
     
     if len(id_list)>200:
@@ -496,7 +504,7 @@ def efetch_on_id_list(id_list):
             mid = mid
         )
 
-        paper_data = PubMedPaperData(
+        paper_data = PubmedEFetchData(
             paper_id = id_set,
             title = title, 
             year = year_pub,
@@ -510,17 +518,3 @@ def efetch_on_id_list(id_list):
         )
         papers.append(paper_data)
     return papers
-
-
-def efetch_on_elink(id_list, linkname):
-    unique_fetch_list, id_mapper = elink_on_id_list(id_list, linkname)
-    sub_papers = efetch_on_id_list(unique_fetch_list)
-    sub_paper_index = {i.paper_id.pubmed: i for i in sub_papers}
-
-    id_mapper_papers = {}
-    for search_id, id_list in id_mapper.items():
-        if id_list is not None:
-            id_mapper_papers[search_id] = [sub_paper_index[sub_id] for sub_id in id_list]
-        else:
-            id_mapper_papers[search_id] = None
-    return id_mapper_papers
