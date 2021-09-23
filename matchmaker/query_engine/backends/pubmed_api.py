@@ -11,55 +11,56 @@ from postal.parser import parse_address
 from matchmaker.query_engine.query_types import And, Or, Title, AuthorName, Journal, Abstract, Institution, Keyword, Year, StringPredicate
 from typing import Annotated, Literal, Tuple
 
-def extract_postcodes(institution):
-    def find_all(a_str, sub):
-        start = 0
-        while True:
-            start = a_str.find(sub, start)
-            if start == -1: return
-            yield start
-            start += len(sub)
+def process_institution(institution):
+    def remove_emails_from_phrase(initial_phrase):
+        def find_all(a_str, sub):
+            start = 0
+            while True:
+                start = a_str.find(sub, start)
+                if start == -1: return
+                yield start
+                start += len(sub)
+        
+        def remove_from_phrase(phrase, to_remove):
+            starts = [i[0] for i in to_remove]
+            starts.sort()
+            ends = [i[1] for i in to_remove]
+            ends.sort()
+            real_starts = [0] + ends
+            real_ends = starts + [len(phrase)]
+            if len(phrase) in real_starts:
+                real_starts.remove(len(phrase))
+                real_ends.remove(len(phrase))
+            phrase_parts = []
+            for counter, real_start in enumerate(real_starts):
+                real_end = real_ends[counter]
+                phrase_parts.append(phrase[real_start: real_end])
+            new_phrase = ''.join(phrase_parts)
+            return new_phrase
+        
+        words_to_remove = [
+            'email',
+            'electronic address'
+        ]
+        at_locations =list(find_all(initial_phrase, '@'))
+        emails = []
+        for at_location in at_locations:
+            if at_location != -1:
+                words = initial_phrase.split(' ')
+                for word in words:
+                    if '@' in word:
+                        words_to_remove.append(word)
+                        emails.append(word)
+        
+        to_remove = []
+        for i in words_to_remove:
+            start_phrase_loc = initial_phrase.lower().find(i)
+            if start_phrase_loc != -1:
+                end_phrase_loc = start_phrase_loc + len(i)
+                to_remove.append((start_phrase_loc, end_phrase_loc))
+        return remove_from_phrase(initial_phrase, to_remove), emails
     
-    def remove_from_phrase(phrase, to_remove):
-        starts = [i[0] for i in to_remove]
-        starts.sort()
-        ends = [i[1] for i in to_remove]
-        ends.sort()
-        real_starts = [0] + ends
-        real_ends = starts + [len(phrase)]
-        if len(phrase) in real_starts:
-            real_starts.remove(len(phrase))
-            real_ends.remove(len(phrase))
-        phrase_parts = []
-        for counter, real_start in enumerate(real_starts):
-            real_end = real_ends[counter]
-            phrase_parts.append(phrase[real_start: real_end])
-        new_phrase = ''.join(phrase_parts)
-
-        return new_phrase
-    words_to_remove = [
-        'email',
-        'electronic address'
-    ]
-    at_locations =list(find_all(institution, '@'))
-    emails = []
-    for at_location in at_locations:
-        if at_location != -1:
-            words = institution.split(' ')
-            for word in words:
-                if '@' in word:
-                    words_to_remove.append(word)
-                    emails.append(word)
-    
-    to_remove = []
-    for i in words_to_remove:
-        start_phrase_loc = institution.lower().find(i)
-        if start_phrase_loc != -1:
-            end_phrase_loc = start_phrase_loc + len(i)
-            to_remove.append((start_phrase_loc, end_phrase_loc))
-    new_institution = remove_from_phrase(institution, to_remove)
-
-    def method0(new_institution):
+    def parse_institution(new_institution):
         institution_split = new_institution.split(',')
         combined_sections = []
         for section in institution_split:
@@ -70,37 +71,13 @@ def extract_postcodes(institution):
                 to_parse = expanded[0]
             parsed_section = parse_address(to_parse)
             combined_sections = combined_sections + parsed_section
-        #print(combined_sections)
+
         return combined_sections
-        #postcodes = [i[0] for i in combined_sections if i[1] == 'postcode']
-        #return postcodes
-    """
-    def method1(new_institution):
-        expanded = expand_address(new_institution)
-        if expanded == []:
-            to_parse = new_institution
-        else:
-            to_parse = expanded[0]
-        parsed_section = parse_address(to_parse)
-        return parsed_section
-        #postcodes = [i[0] for i in parsed_section if i[1] == 'postcode']
-        #return postcodes
     
-    def method2(new_institution):
-        parsed_section = parse_address(new_institution)
-        return parsed_section
-        #postcodes = [i[0] for i in parsed_section if i[1] == 'postcode']
-        #return postcodes
-    """
-    processed = method0(new_institution)
+    new_institution, emails = remove_emails_from_phrase(institution)
+    processed = parse_institution(new_institution)
     proc_emails = [(i, 'email') for i in emails]
     combined_proc = processed + proc_emails
-    #method0a = method0(new_institution)
-    #method0b = method0(institution)
-    #method1a = method1(new_institution)
-    #method1b = method1(institution)
-    #method2a = method2(new_institution)
-    #method2b = method2(institution)
 
     reduced_combined_proc = []
     for i in combined_proc:
@@ -109,7 +86,7 @@ def extract_postcodes(institution):
     
     if reduced_combined_proc == []:
         reduced_combined_proc = None
-    #print(reduced_combined_proc)
+
     return reduced_combined_proc
 
 def inspect_xml_dict(i):
@@ -456,7 +433,7 @@ def efetch_on_id_list(id_list):
             affiliation_info = author.find("AffiliationInfo")
             if affiliation_info is not None:
                 institution = affiliation_info.find('Affiliation').text
-                proc_institution = extract_postcodes(institution)
+                proc_institution = process_institution(institution)
             else:
                 institution = None
                 proc_institution = None
