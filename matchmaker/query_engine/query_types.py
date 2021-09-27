@@ -153,6 +153,3 @@ class AuthorDetailsQuery(BaseModel):
     id: str
 
 
-class CoauthorQuery(BaseModel):
-    id: str
-

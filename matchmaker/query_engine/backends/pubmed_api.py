@@ -10,6 +10,7 @@ from postal.expand import expand_address
 from postal.parser import parse_address
 from matchmaker.query_engine.query_types import And, Or, Title, AuthorName, Journal, Abstract, Institution, Keyword, Year, StringPredicate
 from typing import Annotated, Literal, Tuple, Dict
+from httpx import Client, AsyncClient
 
 def process_institution(institution):
     def remove_emails_from_phrase(initial_phrase):
@@ -153,7 +154,11 @@ class PubmedESearchData(BaseModel):
     ret_start: int
 
 # ESearch
-def esearch_on_query(query: PubmedESearchQuery) -> PubmedESearchData:
+async def esearch_on_query(
+    query: PubmedESearchQuery,
+    client: AsyncClient,
+    api_key: str = None
+) -> PubmedESearchData:
     def query_to_term(query):
         def make_year_term(start_year:int = 1000, end_year:int = 3000):
             if start_year==end_year:
@@ -225,13 +230,20 @@ def esearch_on_query(query: PubmedESearchQuery) -> PubmedESearchData:
         term, 
         db='pubmed', 
         retmax:int = 10000, 
-        prefix= 'https://eutils.ncbi.nlm.nih.gov/entrez/eutils/'
+        prefix= 'https://eutils.ncbi.nlm.nih.gov/entrez/eutils/',
+        api_key = None
     ):
-        return f'{prefix}esearch.fcgi?db={db}&retmax={retmax}&term={quote_plus(str(term))}'
+        if api_key is None:
+            return f'{prefix}esearch.fcgi?db={db}&retmax={retmax}&term={quote_plus(str(term))}'
+        else:
+            return f'{prefix}esearch.fcgi?db={db}&retmax={retmax}&term={quote_plus(str(term))}&api_key={api_key}'
     term = query_to_term(query.dict()['__root__'])
-    search_url = make_search_given_term(term)
+    search_url = make_search_given_term(term, api_key=api_key)
 
-    raw_out = requests.get(search_url).text
+    output = await client.get(search_url)
+    #print(output)
+    print('search')
+    raw_out = output.text
     proc_out = xml_parse.fromstring(raw_out)
     id_list = []
     for result in proc_out:
@@ -262,17 +274,28 @@ class PubmedELinkData(BaseModel):
     id_mapper: Dict[str, Optional[List[str]]]
 
 # Elink
-def elink_on_id_list(query: PubmedELinkQuery) -> PubmedELinkData:
+async def elink_on_id_list(
+    query: PubmedELinkQuery, 
+    client: AsyncClient,
+    api_key = None
+) -> PubmedELinkData:
     def make_elink_url(
             id_list,
             linkname,
-            prefix= 'https://eutils.ncbi.nlm.nih.gov/entrez/eutils/'
+            prefix= 'https://eutils.ncbi.nlm.nih.gov/entrez/eutils/',
+            api_key = None,
         ):
-            return f'{prefix}elink.fcgi?dbfrom=pubmed&linkname={linkname}&id='+'&id='.join(id_list)
+            if api_key is None:
+                return f'{prefix}elink.fcgi?dbfrom=pubmed&linkname={linkname}&id='+'&id='.join(id_list)
+            else:
+                return f'{prefix}elink.fcgi?dbfrom=pubmed&linkname={linkname}&api_key={api_key}&id='+'&id='.join(id_list)
     id_list = query.pubmed_id_list
     linkname = query.linkname
-    url = make_elink_url(id_list, linkname)
-    raw_references = requests.get(url).text
+    url = make_elink_url(id_list, linkname, api_key = api_key)
+    output = await client.get(url)
+    #print(output)
+    print('link')
+    raw_references = output.text
     proc_ref = xmltodict.parse(raw_references)
     link_set = proc_ref['eLinkResult']['LinkSet']
 
@@ -349,19 +372,31 @@ class PubmedEFetchData(BaseModel):
 #### End E Fetch paper def ####
 
 # EFetch
-def efetch_on_id_list(query: PubmedEFetchQuery) -> List[PubmedEFetchData]:
+async def efetch_on_id_list(
+    query: PubmedEFetchQuery,
+    client: AsyncClient,
+    api_key: str = None
+) -> List[PubmedEFetchData]:
     def make_fetch_given_ids(
         id_list,
-        prefix= 'https://eutils.ncbi.nlm.nih.gov/entrez/eutils/'
+        prefix= 'https://eutils.ncbi.nlm.nih.gov/entrez/eutils/',
+        api_key: str = None
     ):
-        return f'{prefix}efetch.fcgi?db=pubmed&retmode=xml&id={",".join(id_list)}'
+        if api_key is None:
+            return f'{prefix}efetch.fcgi?db=pubmed&retmode=xml&id={",".join(id_list)}'
+        else:
+            return f'{prefix}efetch.fcgi?db=pubmed&retmode=xml&api_key={api_key}&id={",".join(id_list)}'
     id_list = query.pubmed_id_list
     fetch_url = make_fetch_given_ids(id_list)
-    
+    #print(id_list)
     if len(id_list)>200:
-        raw_fetch_out = requests.post(make_fetch_given_ids(['']), {'id': id_list}).text
+        output = await client.post(make_fetch_given_ids(['']), data = {'id': id_list})
     else:
-        raw_fetch_out = requests.get(fetch_url).text
+        output = await client.get(fetch_url)
+    print('fetch')
+    #print(output)
+    raw_fetch_out = output.text
+    #print(raw_fetch_out)
     proc_out = xml_parse.fromstring(raw_fetch_out)
     papers = []
     for i in proc_out:
