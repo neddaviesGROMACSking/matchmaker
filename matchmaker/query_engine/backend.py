@@ -2,7 +2,7 @@ from pydantic import BaseModel
 from typing import Generic, List, Type, TypeVar
 
 from matchmaker.query_engine.query_types import PaperSearchQuery, \
-        AuthorSearchQuery, PaperDetailsQuery, AuthorDetailsQuery
+        AuthorSearchQuery
 from matchmaker.query_engine.data_types import PaperData, AuthorData
 from matchmaker.query_engine.abstract import AbstractQueryEngine
 
@@ -11,10 +11,4 @@ class Backend:
         raise NotImplementedError('Calling method on abstract base class')
 
     def authorSearchEngine(self) -> AbstractQueryEngine[AuthorSearchQuery, List[AuthorData]]:
-        raise NotImplementedError('Calling method on abstract base class')
-
-    def paperDetailsEngine(self) -> AbstractQueryEngine[PaperDetailsQuery, PaperData]:
-        raise NotImplementedError('Calling method on abstract base class')
-
-    def authorDetailsEngine(self) -> AbstractQueryEngine[AuthorDetailsQuery, AuthorData]:
         raise NotImplementedError('Calling method on abstract base class')

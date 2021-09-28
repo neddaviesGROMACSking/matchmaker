@@ -2,7 +2,7 @@ from pydantic import BaseModel, Field
 from typing import List, Union, Literal, Optional, Any
 
 from matchmaker.query_engine.query_types import PaperSearchQuery, \
-        AuthorSearchQuery, PaperDetailsQuery, AuthorDetailsQuery
+        AuthorSearchQuery
 from matchmaker.query_engine.data_types import PaperData, AuthorData
 from matchmaker.query_engine.slightly_less_abstract import SlightlyLessAbstractQueryEngine
 from matchmaker.query_engine.backend import Backend
@@ -24,8 +24,6 @@ from pprint import pprint
 from asyncio import Future, get_running_loop, gather, create_task
 from httpx import AsyncClient
 from copy import copy
-class PubMedPaperDetailsQuery(BaseModel):
-    pubmed_ids: List[str]
 
 
 class PubmedAuthorID(PubmedAuthor):
@@ -48,13 +46,6 @@ class PubMedAuthorSearchQuery(BaseModel):
 and_int.update_forward_refs()
 or_int.update_forward_refs()
 PubMedAuthorSearchQuery.update_forward_refs()
-
-
-class PubMedAuthorDetailsQuery(BaseModel):
-    # TODO: implement this
-    pass
-
-
 
 
 class PubMedAuthorData(BaseModel):
@@ -222,26 +213,6 @@ class PaperSearchQueryEngine(
     def _data_from_native(self, data: List[PubmedEFetchData]) -> List[PaperData]:
         return [paper_from_native(datum) for datum in data]
 
-
-class PaperDetailsQueryEngine(
-        SlightlyLessAbstractQueryEngine[PaperDetailsQuery,
-            PaperData, PubMedPaperDetailsQuery, PubmedEFetchData]):
-    def _query_to_native(self, query: PaperDetailsQuery) -> PubMedPaperDetailsQuery:
-        # TODO: implement this
-        pass
-
-    def _run_native_query(self, query: PubMedPaperDetailsQuery) -> PubmedEFetchData:
-        # TODO: implement this
-        pass
-
-    def _post_process(self, query: PaperDetailsQuery, data: PubmedEFetchData) -> PubmedEFetchData:
-        # TODO: implement this
-        pass
-
-    def _data_from_native(self, data: PubmedEFetchData) -> PaperData:
-        return paper_from_native(data)
-
-
 class AuthorSearchQueryEngine(
         SlightlyLessAbstractQueryEngine[AuthorSearchQuery,
             List[AuthorData], PubMedAuthorSearchQuery, List[PubMedAuthorData]]):
@@ -264,25 +235,6 @@ class AuthorSearchQueryEngine(
         # TODO: implement this
         pass
 
-class AuthorDetailsQueryEngine(
-        SlightlyLessAbstractQueryEngine[AuthorDetailsQuery,
-            AuthorData, PubMedAuthorDetailsQuery, PubMedAuthorData]):
-    def _query_to_native(self, query: AuthorDetailsQuery) -> PubMedAuthorDetailsQuery:
-        # TODO: implement this
-        pass
-
-    def _run_native_query(self, query: PubMedAuthorDetailsQuery) -> PubMedAuthorData:
-        # TODO: implement this
-        pass
-
-    def _post_process(self, query: AuthorDetailsQuery, data: PubMedAuthorData) -> PubMedAuthorData:
-        # TODO: implement this
-        pass
-
-    def _data_from_native(self, data: PubMedAuthorData) -> AuthorData:
-        # TODO: implement this
-        pass
-
 
 class PubMedBackend(Backend):
     def paperSearchEngine(self) -> PaperSearchQueryEngine:
@@ -290,9 +242,3 @@ class PubMedBackend(Backend):
 
     def authorSearchEngine(self) -> AuthorSearchQueryEngine:
         return AuthorSearchQueryEngine()
-
-    def paperDetailsEngine(self) -> PaperDetailsQueryEngine:
-        return PaperDetailsQueryEngine()
-
-    def authorDetailsEngine(self) -> AuthorDetailsQueryEngine:
-        return AuthorDetailsQueryEngine()

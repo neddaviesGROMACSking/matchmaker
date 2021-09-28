@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 from asyncio import coroutine, Future, get_running_loop
-from matchmaker.query_engine.query_types import PaperSearchQuery, AuthorSearchQuery, PaperDetailsQuery, AuthorDetailsQuery
+from matchmaker.query_engine.query_types import PaperSearchQuery, AuthorSearchQuery
 from matchmaker.query_engine.slightly_less_abstract import AbstractNativeQuery, SlightlyLessAbstractQueryEngine
 from matchmaker.query_engine.data_types import PaperData, AuthorData
 from typing import Dict, TypeVar,Generic, Tuple, Callable, Awaitable, Optional
@@ -41,7 +41,7 @@ class RateLimiter:
             elapsed = current_time - self.bunch_start
             if elapsed < 1:
                 if self.requests_made >= self.max_requests_per_second:
-                    await asyncio.sleep(1.2)
+                    await asyncio.sleep(1)
                     await self.rate_limit()
                 else:
                     self.requests_made += 1
@@ -57,7 +57,7 @@ class NewAsyncClient(AsyncClient):
         self.rate_limiter = rate_limiter
         self.number_of_tries = number_of_tries
         super().__init__(*args, **kwargs)
-    
+    """
     async def get(self, *args, **kwargs):
         await self.rate_limiter.rate_limit()
         output =  await super().get(*args, **kwargs)
@@ -100,7 +100,7 @@ class NewAsyncClient(AsyncClient):
                 except RemoteProtocolError:
                     continue
             return await super().post(*args, **kwargs)
-    """
+    
 
 @dataclass
 class BaseNativeQuery(Generic[NativeData], AbstractNativeQuery):
@@ -148,19 +148,5 @@ class BasePaperSearchQueryEngine(
 class BaseAuthorSearchQueryEngine(
     Generic[NativeData], 
     BaseBackendQueryEngine[AuthorSearchQuery, AuthorData, NativeData]
-):
-    pass
-
-
-class BasePaperDetailsQueryEngine(
-    Generic[NativeData], 
-    BaseBackendQueryEngine[PaperDetailsQuery, PaperData, NativeData]
-):
-    pass
-
-
-class BaseAuthorDetailsQueryEngine(
-    Generic[NativeData], 
-    BaseBackendQueryEngine[AuthorDetailsQuery, AuthorData, NativeData]
 ):
     pass

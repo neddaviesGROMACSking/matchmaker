@@ -143,13 +143,3 @@ AuthorSearchQuery = Annotated[  # type: ignore[misc]
 
 And['AuthorSearchQuery'].update_forward_refs()
 Or['AuthorSearchQuery'].update_forward_refs()
-
-
-class PaperDetailsQuery(BaseModel):
-    id: PaperID
-
-
-class AuthorDetailsQuery(BaseModel):
-    id: str
-
-
