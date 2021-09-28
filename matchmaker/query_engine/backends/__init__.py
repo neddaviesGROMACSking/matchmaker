@@ -19,19 +19,20 @@ async def iterate_method(tries, method_name, *args, **kwargs):
         except RemoteProtocolError:
             continue
     return await getattr(super(),method_name)(*args, **kwargs)
+
 import uuid
-class NewAsyncClient(AsyncClient):
-    number_of_tries: int
+
+class RateLimiter:
     bunch_start: Optional[float]
-    def __init__(self, *args, number_of_tries= 1000, max_requests_per_second = 2, **kwargs):
-        self.number_of_tries = number_of_tries
+    max_requests_per_second: int
+    requests_made: int
+    def __init__(self, *args, max_requests_per_second = 5, **kwargs):
         self.max_requests_per_second = max_requests_per_second
         self.bunch_start= None
         self.requests_made = 0
         super().__init__(*args, **kwargs)
     
     async def rate_limit(self):
-        #print(self.requests_made)
         current_time = time.time()
         if self.bunch_start is None:
             self.bunch_start = current_time
@@ -40,20 +41,39 @@ class NewAsyncClient(AsyncClient):
             elapsed = current_time - self.bunch_start
             if elapsed < 1:
                 if self.requests_made >= self.max_requests_per_second:
-                    await asyncio.sleep(1)
+                    await asyncio.sleep(1.2)
                     await self.rate_limit()
                 else:
                     self.requests_made += 1
             else:
                 self.bunch_start = current_time
                 self.requests_made = 1
-        #print(current_time)
 
+class NewAsyncClient(AsyncClient):
+    rate_limiter: RateLimiter
+    number_of_tries:int
+    def __init__(self, *args, rate_limiter: RateLimiter = RateLimiter(), number_of_tries=1000, **kwargs):
+        self.rate_limiter = rate_limiter
+        self.number_of_tries = number_of_tries
+        super().__init__(*args, **kwargs)
+    
+    async def get(self, *args, **kwargs):
+        await self.rate_limiter.rate_limit()
+        output =  await super().get(*args, **kwargs)
+        print(output)
+        return output
+
+    async def post(self, *args, **kwargs):
+        await self.rate_limiter.rate_limit()
+        output =  await super().post(*args, **kwargs)
+        print(output)
+        return output
+    """
     async def get(self, *args, **kwargs):
             for i in range(self.number_of_tries):
                 try:
                     loop = get_running_loop()
-                    await self.rate_limit()
+                    await self.rate_limiter.rate_limit()
                     uuid_it = uuid.uuid4()
                     print(f"start: {loop.time()} - {uuid_it}")
                     output = await super().get(*args, **kwargs)
@@ -69,16 +89,17 @@ class NewAsyncClient(AsyncClient):
             for i in range(self.number_of_tries):
                 try:
                     loop = get_running_loop()
-                    await self.rate_limit()
-                    #uuid_it = uuid.uuid4()
-                    #print(f"start: {loop.time()} - {uuid_it}")
+                    await self.rate_limiter.rate_limit()
+                    uuid_it = uuid.uuid4()
+                    print(f"start: {loop.time()} - {uuid_it}")
                     output = await super().post(*args, **kwargs)
-                    #print(f"end: {loop.time()} - {uuid_it}")
+                    print(f"end: {loop.time()} - {uuid_it}")
                     print(output)
                     return output
                 except RemoteProtocolError:
                     continue
             return await super().post(*args, **kwargs)
+    """
 
 @dataclass
 class BaseNativeQuery(Generic[NativeData], AbstractNativeQuery):

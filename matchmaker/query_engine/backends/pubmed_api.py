@@ -382,15 +382,16 @@ async def efetch_on_id_list(
         prefix= 'https://eutils.ncbi.nlm.nih.gov/entrez/eutils/',
         api_key: str = None
     ):
+        #print(api_key)
         if api_key is None:
             return f'{prefix}efetch.fcgi?db=pubmed&retmode=xml&id={",".join(id_list)}'
         else:
             return f'{prefix}efetch.fcgi?db=pubmed&retmode=xml&api_key={api_key}&id={",".join(id_list)}'
     id_list = query.pubmed_id_list
-    fetch_url = make_fetch_given_ids(id_list)
+    fetch_url = make_fetch_given_ids(id_list, api_key=api_key)
     #print(id_list)
     if len(id_list)>200:
-        output = await client.post(make_fetch_given_ids(['']), data = {'id': id_list})
+        output = await client.post(make_fetch_given_ids([''], api_key=api_key), data = {'id': id_list})
     else:
         output = await client.get(fetch_url)
     print('fetch')
