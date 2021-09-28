@@ -34,15 +34,13 @@ pub_searcher = PaperSearchQueryEngine(api_key=pubmed_api_key)
 
 start = time.time()
 async def main():
-    test = pub_searcher._query_to_native(PaperSearchQuery.parse_obj(d))
-    #test = PubmedESearchQuery.parse_obj(d)
-    awaitable, metadata = pub_searcher._query_to_awaitable(test)
-    # Run native query
-    print(awaitable)
-    connector = aiohttp.TCPConnector(force_close=True)
-    async with NewAsyncClient(connector = connector) as client:
-        test = await awaitable(client)
-    return test
+    query = PaperSearchQuery.parse_obj(d)
+    test = await pub_searcher._query_to_native(query)
+    awaitable = test.coroutine_function
+    metadata = test.metadata
+    unproc_result = await pub_searcher._run_native_query(test)
+    proc_result = await pub_searcher._post_process(query, unproc_result)
+    return unproc_result
 results = asyncio.run(main())
 print(len(str(results)))
 end = time.time()

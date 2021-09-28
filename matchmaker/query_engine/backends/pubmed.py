@@ -6,6 +6,7 @@ from matchmaker.query_engine.query_types import PaperSearchQuery, \
 from matchmaker.query_engine.data_types import PaperData, AuthorData
 from matchmaker.query_engine.slightly_less_abstract import SlightlyLessAbstractQueryEngine
 from matchmaker.query_engine.backend import Backend
+from matchmaker.query_engine.backends import BasePaperSearchQueryEngine, BaseAuthorSearchQueryEngine
 from matchmaker.query_engine.backends.pubmed_api import (
     PubmedESearchQuery, 
     MeshTopic, 
@@ -63,21 +64,18 @@ def make_doi_search_term(doi_list):
 
 
 class PaperSearchQueryEngine(
-        SlightlyLessAbstractQueryEngine[PaperSearchQuery,
-            List[PaperData], PubmedESearchQuery, List[PubmedEFetchData]]):
+        BasePaperSearchQueryEngine[List[PubmedEFetchData], List[PubmedEFetchData]]):
     api_key:str
     def __init__(self, api_key, *args, **kwargs):
         self.api_key = api_key
         super().__init__(*args, **kwargs)
-    def _query_to_native(self, query: PaperSearchQuery) -> PubmedESearchQuery:
-        query = query.dict()['__root__']
-        return PubmedESearchQuery.parse_obj(query)
 
-
-    def _query_to_awaitable(self, query: PubmedESearchQuery) -> List[PubmedEFetchData]:
+    def _query_to_awaitable(self, query: PaperSearchQuery) -> List[PubmedEFetchData]:
         split_factor = 9
+        print(query)
         async def make_coroutine(client: ClientSession):
             async def esearch_on_query_set_future(id_list_future, query, client):
+
                 output = await esearch_on_query(query, client, api_key=self.api_key)
                 id_list = output.pubmed_id_list
                 id_list_future.set_result(id_list)
@@ -207,17 +205,17 @@ class PaperSearchQueryEngine(
         }
         return make_coroutine, metadata
 
-    def _post_process(self, query: PaperSearchQuery, data: List[PubmedEFetchData]) -> List[PubmedEFetchData]:
+    async def _post_process(self, query: PaperSearchQuery, data: List[PubmedEFetchData]) -> List[PubmedEFetchData]:
+        print('post_proc')
         # TODO: implement this
         pass
 
-    def _data_from_native(self, data: List[PubmedEFetchData]) -> List[PaperData]:
+    def _data_from_processed(self, data: List[PubmedEFetchData]) -> List[PaperData]:
         return [paper_from_native(datum) for datum in data]
 
 class AuthorSearchQueryEngine(
-        SlightlyLessAbstractQueryEngine[AuthorSearchQuery,
-            List[AuthorData], PubMedAuthorSearchQuery, List[PubMedAuthorData]]):
-    def _query_to_native(self, query: AuthorSearchQuery) -> PubMedAuthorSearchQuery:
+        BasePaperSearchQueryEngine[List[PubMedAuthorData], List[PubMedAuthorData]]):
+    def _query_to_awaitable(self, query: AuthorSearchQuery) -> PubMedAuthorSearchQuery:
         # TODO: implement this
         pass
 
@@ -232,7 +230,7 @@ class AuthorSearchQueryEngine(
         # TODO: implement this
         pass
 
-    def _data_from_native(self, data: List[PubMedAuthorData]) -> List[AuthorData]:
+    def _data_from_processed(self, data: List[PubMedAuthorData]) -> List[AuthorData]:
         # TODO: implement this
         pass
 

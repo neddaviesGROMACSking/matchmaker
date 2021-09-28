@@ -5,11 +5,11 @@ from matchmaker.query_engine.slightly_less_abstract import AbstractNativeQuery, 
 from matchmaker.query_engine.data_types import PaperData, AuthorData
 from typing import Dict, TypeVar,Generic, Tuple, Callable, Awaitable, Optional
 
-from aiohttp import ClientSession
+from aiohttp import ClientSession, TCPConnector
 import asyncio
 import time
 
-NativeData = TypeVar('NativeData')
+
 
 import uuid
 
@@ -43,51 +43,23 @@ class RateLimiter:
 
 class NewAsyncClient(ClientSession):
     rate_limiter: RateLimiter
-    number_of_tries:int
 
-    def __init__(self, *args, rate_limiter: RateLimiter = RateLimiter(), number_of_tries=1000, **kwargs):
+    def __init__(self, *args, rate_limiter: RateLimiter = RateLimiter(), **kwargs):
         self.rate_limiter = rate_limiter
-        self.number_of_tries = number_of_tries
         super().__init__(*args, **kwargs)
-    """
     async def get(self, *args, **kwargs):
         await self.rate_limiter.rate_limit()
-        output =  await super().get(*args, **kwargs)
-        #print(output)
+        output = await super().get(*args, **kwargs)
         print(int(dict(output.raw_headers)[b'X-RateLimit-Remaining']))
         return output
 
     async def post(self, *args, **kwargs):
         await self.rate_limiter.rate_limit()
-        output =  await super().post(*args, **kwargs)
-        #print(output)
+        output = await super().post(*args, **kwargs)
         print(int(dict(output.raw_headers)[b'X-RateLimit-Remaining']))
         return output
-    """
-    async def get(self, *args, **kwargs):
-            loop = get_running_loop()
-            await self.rate_limiter.rate_limit()
-            uuid_it = uuid.uuid4()
-            print(f"start: {loop.time()} - {uuid_it}")
-            output = await super().get(*args, **kwargs)
-            print(f"end: {loop.time()} - {uuid_it}")
-            print(int(dict(output.raw_headers)[b'X-RateLimit-Remaining']))
-            #print(output)
-            return output
-
-    async def post(self, *args, **kwargs):
-            loop = get_running_loop()
-            await self.rate_limiter.rate_limit()
-            uuid_it = uuid.uuid4()
-            print(f"start: {loop.time()} - {uuid_it}")
-            output = await super().post(*args, **kwargs)
-            print(f"end: {loop.time()} - {uuid_it}")
-            print(int(dict(output.raw_headers)[b'X-RateLimit-Remaining']))
-            #print(output)
-            return output
-
-
     
+NativeData = TypeVar('NativeData')
 
 @dataclass
 class BaseNativeQuery(Generic[NativeData], AbstractNativeQuery):
@@ -101,39 +73,44 @@ class BaseNativeQuery(Generic[NativeData], AbstractNativeQuery):
 Query = TypeVar('Query')
 Data = TypeVar('Data')
 
-
+ProcessedNativeData = TypeVar('ProcessedNativeData')
 class BaseBackendQueryEngine(
-    Generic[Query, Data, NativeData], 
-    SlightlyLessAbstractQueryEngine[Query, Data, BaseNativeQuery[NativeData], NativeData]
+    Generic[Query, NativeData, ProcessedNativeData, Data], 
+    SlightlyLessAbstractQueryEngine[Query, BaseNativeQuery[NativeData], NativeData, ProcessedNativeData, Data]
 ):
-    async def _query_to_awaitable(self, query: Query) -> Tuple[coroutine, Dict[str, str]]:
+    def _query_to_awaitable(self, query: Query) -> Tuple[coroutine, Dict[str, str]]:
         raise NotImplementedError('This method is required for query_to_native')
     async def _query_to_native(self, query: Query) -> BaseNativeQuery[NativeData]:
-        awaitable, metadata = await _query_to_awaitable(query)
+        awaitable, metadata = self._query_to_awaitable(query)
         return BaseNativeQuery(awaitable, metadata)
 
     async def _run_native_query(self, query: BaseNativeQuery[NativeData]) -> NativeData:
         print('here')
-        async with NewAsyncClient() as client:
-            results = await query.awaitable(client)
+        connector = TCPConnector(force_close=True)
+        async with NewAsyncClient(connector = connector) as client:
+            results = await query.coroutine_function(client)
         return results
     
-    async def _post_process(self, query: BaseNativeQuery[NativeData], data):
+    async def _post_process(self, query: BaseNativeQuery[NativeData], data: NativeData) -> ProcessedNativeData:
         return data
 
-
+    async def _data_from_processed(self, data: ProcessedNativeData) -> Data:
+        raise NotImplementedError('Calling method on abstract base class')
+    async def __call__(self, query: Query) -> Data:
+        nd = await self._run_native_query(await self._query_to_native(query))
+        return await self._data_from_processed(await self._post_process(query, nd))
     #Put post process as no op
 
 
 class BasePaperSearchQueryEngine(
-    Generic[NativeData], 
-    BaseBackendQueryEngine[PaperSearchQuery, PaperData, NativeData]
+    Generic[NativeData, ProcessedNativeData], 
+    BaseBackendQueryEngine[PaperSearchQuery, NativeData, ProcessedNativeData, PaperData]
 ):
     pass
 
 
 class BaseAuthorSearchQueryEngine(
-    Generic[NativeData], 
-    BaseBackendQueryEngine[AuthorSearchQuery, AuthorData, NativeData]
+    Generic[NativeData, ProcessedNativeData], 
+    BaseBackendQueryEngine[AuthorSearchQuery, NativeData, ProcessedNativeData, AuthorData]
 ):
     pass

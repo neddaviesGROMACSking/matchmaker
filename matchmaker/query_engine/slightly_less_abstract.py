@@ -16,7 +16,7 @@ NativeQuery = TypeVar('NativeQuery', bound=AbstractNativeQuery)
 NativeData = TypeVar('NativeData')
 ProcessedNativeData = TypeVar('ProcessedNativeData')
 
-class SlightlyLessAbstractQueryEngine(Generic[Query, Data, NativeQuery, NativeData], AbstractQueryEngine[Query, Data]):
+class SlightlyLessAbstractQueryEngine(Generic[Query, NativeQuery, NativeData, ProcessedNativeData, Data], AbstractQueryEngine[Query, Data]):
     def _query_to_native(self, query: Query) -> NativeQuery:
         raise NotImplementedError('Calling method on abstract base class')
     def _run_native_query(self, query: NativeQuery) -> NativeData:
