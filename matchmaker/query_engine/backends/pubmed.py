@@ -83,6 +83,7 @@ class PaperSearchQueryEngine(
 
 
     def _query_to_awaitable(self, query: PubmedESearchQuery) -> List[PubmedEFetchData]:
+        split_factor = 10
         async def make_coroutine(client: AsyncClient):
             async def esearch_on_query_set_future(id_list_future, query, client):
                 output = await esearch_on_query(query, client, api_key=self.api_key)
@@ -93,7 +94,6 @@ class PaperSearchQueryEngine(
             async def efetch_on_id_list_resolve_id(id_list_future, client):
                 await id_list_future
                 id_list = id_list_future.result()
-                #print(self.api_key)
                 result = await efetch_on_id_list(PubmedEFetchQuery(pubmed_id_list = id_list), client, api_key=self.api_key)
                 return result
 
@@ -118,7 +118,6 @@ class PaperSearchQueryEngine(
                 return id_mapper
 
             async def redistribute_fetches(*list_futures, bin_futures = None, split_factor = None):
-                print('here')
                 if bin_futures is None:
                     raise ValueError( 'No bin_futures')
                 if split_factor is None:
@@ -138,28 +137,11 @@ class PaperSearchQueryEngine(
                         bins.append(unique_total_fetch_list[bin_size*i:len(unique_total_fetch_list)])
                     else:
                         bins.append(unique_total_fetch_list[bin_size*i:bin_size*(i+1)])
-                #awaitables = []
-                
+
                 for counter, j in enumerate(bin_futures):
                     bin_item = bins[counter]
                     j.set_result(bin_item)
-                
-
-
-                #awaitables.append(efetch_on_id_list(PubmedEFetchQuery(pubmed_id_list = fetch_list), client, api_key=self.api_key))
-                
-
-            """
-
-                new_sub_papers = []
-                for i in sub_papers:
-                    new_sub_papers += i
-                
-                #sub_papers = await efetch_on_id_list(PubmedEFetchQuery(pubmed_id_list = fetch_list), client, api_key=self.api_key)
-                sub_paper_index = {i.paper_id.pubmed: i for i in new_sub_papers}
-                return sub_paper_index
-            """
-
+            
             async def get_papers_from_index(id_mapper, sub_paper_index):
                 id_mapper_papers = {}
                 for search_id, id_list in id_mapper.items():
@@ -173,7 +155,7 @@ class PaperSearchQueryEngine(
             ref_fetch_list_future = get_running_loop().create_future()
             cited_fetch_list_future = get_running_loop().create_future()
             unique_total_fetch_list_future = get_running_loop().create_future()
-            split_factor = 10
+
             bin_futures = []
             for j in range(split_factor):
                 bin_futures.append(get_running_loop().create_future())
@@ -195,7 +177,6 @@ class PaperSearchQueryEngine(
                 'pubmed_pubmed_citedin', 
                 client
             )
-
 
             redistribute_await = redistribute_fetches(
                 ref_fetch_list_future, 
@@ -228,7 +209,7 @@ class PaperSearchQueryEngine(
 
             return papers
         metadata = {
-            'efetch': 3,
+            'efetch': 1+split_factor,
             'esearch': 1,
             'elink': 2
         }

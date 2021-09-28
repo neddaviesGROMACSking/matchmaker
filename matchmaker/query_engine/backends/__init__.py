@@ -52,6 +52,7 @@ class RateLimiter:
 class NewAsyncClient(AsyncClient):
     rate_limiter: RateLimiter
     number_of_tries:int
+
     def __init__(self, *args, rate_limiter: RateLimiter = RateLimiter(), number_of_tries=1000, **kwargs):
         self.rate_limiter = rate_limiter
         self.number_of_tries = number_of_tries
@@ -75,10 +76,10 @@ class NewAsyncClient(AsyncClient):
                     loop = get_running_loop()
                     await self.rate_limiter.rate_limit()
                     uuid_it = uuid.uuid4()
-                    print(f"start: {loop.time()} - {uuid_it}")
+                    #print(f"start: {loop.time()} - {uuid_it}")
                     output = await super().get(*args, **kwargs)
-                    print(f"end: {loop.time()} - {uuid_it}")
-                    print(output)
+                    #print(f"end: {loop.time()} - {uuid_it}")
+                    #print(output)
 
                     return output
                 except RemoteProtocolError:
@@ -91,10 +92,10 @@ class NewAsyncClient(AsyncClient):
                     loop = get_running_loop()
                     await self.rate_limiter.rate_limit()
                     uuid_it = uuid.uuid4()
-                    print(f"start: {loop.time()} - {uuid_it}")
+                    #print(f"start: {loop.time()} - {uuid_it}")
                     output = await super().post(*args, **kwargs)
-                    print(f"end: {loop.time()} - {uuid_it}")
-                    print(output)
+                    #print(f"end: {loop.time()} - {uuid_it}")
+                    #print(output)
                     return output
                 except RemoteProtocolError:
                     continue
