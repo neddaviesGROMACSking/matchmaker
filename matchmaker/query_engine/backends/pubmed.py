@@ -22,7 +22,8 @@ from matchmaker.query_engine.query_types import And, Or, Title, AuthorName, Jour
 from typing import Annotated, Literal
 from pprint import pprint
 from asyncio import Future, get_running_loop, gather, create_task
-from httpx import AsyncClient
+
+from aiohttp import ClientSession
 from copy import copy
 
 
@@ -74,8 +75,8 @@ class PaperSearchQueryEngine(
 
 
     def _query_to_awaitable(self, query: PubmedESearchQuery) -> List[PubmedEFetchData]:
-        split_factor = 10
-        async def make_coroutine(client: AsyncClient):
+        split_factor = 9
+        async def make_coroutine(client: ClientSession):
             async def esearch_on_query_set_future(id_list_future, query, client):
                 output = await esearch_on_query(query, client, api_key=self.api_key)
                 id_list = output.pubmed_id_list

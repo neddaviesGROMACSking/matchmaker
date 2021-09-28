@@ -10,8 +10,7 @@ from postal.expand import expand_address
 from postal.parser import parse_address
 from matchmaker.query_engine.query_types import And, Or, Title, AuthorName, Journal, Abstract, Institution, Keyword, Year, StringPredicate
 from typing import Annotated, Literal, Tuple, Dict
-from httpx import Client, AsyncClient
-
+from aiohttp import ClientSession
 def process_institution(institution):
     def remove_emails_from_phrase(initial_phrase):
         def find_all(a_str, sub):
@@ -156,7 +155,7 @@ class PubmedESearchData(BaseModel):
 # ESearch
 async def esearch_on_query(
     query: PubmedESearchQuery,
-    client: AsyncClient,
+    client: ClientSession,
     api_key: str = None
 ) -> PubmedESearchData:
     def query_to_term(query):
@@ -243,7 +242,7 @@ async def esearch_on_query(
     output = await client.get(search_url)
     #print(output)
     print('search')
-    raw_out = output.text
+    raw_out = await output.text()
     proc_out = xml_parse.fromstring(raw_out)
     id_list = []
     for result in proc_out:
@@ -276,7 +275,7 @@ class PubmedELinkData(BaseModel):
 # Elink
 async def elink_on_id_list(
     query: PubmedELinkQuery, 
-    client: AsyncClient,
+    client: ClientSession,
     api_key = None
 ) -> PubmedELinkData:
     def make_elink_url(
@@ -295,7 +294,7 @@ async def elink_on_id_list(
     output = await client.get(url)
     #print(output)
     print('link')
-    raw_references = output.text
+    raw_references = await output.text()
     proc_ref = xmltodict.parse(raw_references)
     link_set = proc_ref['eLinkResult']['LinkSet']
 
@@ -374,7 +373,7 @@ class PubmedEFetchData(BaseModel):
 # EFetch
 async def efetch_on_id_list(
     query: PubmedEFetchQuery,
-    client: AsyncClient,
+    client: ClientSession,
     api_key: str = None
 ) -> List[PubmedEFetchData]:
     def make_fetch_given_ids(
@@ -396,7 +395,7 @@ async def efetch_on_id_list(
         output = await client.get(fetch_url)
     print('fetch')
     #print(output)
-    raw_fetch_out = output.text
+    raw_fetch_out = await output.text()
     #print(raw_fetch_out)
     proc_out = xml_parse.fromstring(raw_fetch_out)
     papers = []

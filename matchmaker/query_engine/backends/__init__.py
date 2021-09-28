@@ -4,21 +4,12 @@ from matchmaker.query_engine.query_types import PaperSearchQuery, AuthorSearchQu
 from matchmaker.query_engine.slightly_less_abstract import AbstractNativeQuery, SlightlyLessAbstractQueryEngine
 from matchmaker.query_engine.data_types import PaperData, AuthorData
 from typing import Dict, TypeVar,Generic, Tuple, Callable, Awaitable, Optional
-from httpx import AsyncClient, RemoteProtocolError
 
+from aiohttp import ClientSession
 import asyncio
 import time
 
 NativeData = TypeVar('NativeData')
-
-async def iterate_method(tries, method_name, *args, **kwargs):
-    for i in range(tries):
-        try:
-            output = await getattr(super(),method_name)(*args, **kwargs)
-            return output
-        except RemoteProtocolError:
-            continue
-    return await getattr(super(),method_name)(*args, **kwargs)
 
 import uuid
 
@@ -26,7 +17,7 @@ class RateLimiter:
     bunch_start: Optional[float]
     max_requests_per_second: int
     requests_made: int
-    def __init__(self, *args, max_requests_per_second = 5, **kwargs):
+    def __init__(self, *args, max_requests_per_second = 9, **kwargs):
         self.max_requests_per_second = max_requests_per_second
         self.bunch_start= None
         self.requests_made = 0
@@ -39,17 +30,18 @@ class RateLimiter:
             self.requests_made = 1
         else:
             elapsed = current_time - self.bunch_start
-            if elapsed < 1:
-                if self.requests_made >= self.max_requests_per_second:
-                    await asyncio.sleep(1)
+            if elapsed < (1/self.max_requests_per_second):
+                if self.requests_made >= 1:
+                    await asyncio.sleep(1/self.max_requests_per_second)
                     await self.rate_limit()
                 else:
                     self.requests_made += 1
             else:
                 self.bunch_start = current_time
                 self.requests_made = 1
+        
 
-class NewAsyncClient(AsyncClient):
+class NewAsyncClient(ClientSession):
     rate_limiter: RateLimiter
     number_of_tries:int
 
@@ -61,45 +53,40 @@ class NewAsyncClient(AsyncClient):
     async def get(self, *args, **kwargs):
         await self.rate_limiter.rate_limit()
         output =  await super().get(*args, **kwargs)
-        print(output)
+        #print(output)
+        print(int(dict(output.raw_headers)[b'X-RateLimit-Remaining']))
         return output
 
     async def post(self, *args, **kwargs):
         await self.rate_limiter.rate_limit()
         output =  await super().post(*args, **kwargs)
-        print(output)
+        #print(output)
+        print(int(dict(output.raw_headers)[b'X-RateLimit-Remaining']))
         return output
     """
     async def get(self, *args, **kwargs):
-            for i in range(self.number_of_tries):
-                try:
-                    loop = get_running_loop()
-                    await self.rate_limiter.rate_limit()
-                    uuid_it = uuid.uuid4()
-                    #print(f"start: {loop.time()} - {uuid_it}")
-                    output = await super().get(*args, **kwargs)
-                    #print(f"end: {loop.time()} - {uuid_it}")
-                    #print(output)
+            loop = get_running_loop()
+            await self.rate_limiter.rate_limit()
+            uuid_it = uuid.uuid4()
+            print(f"start: {loop.time()} - {uuid_it}")
+            output = await super().get(*args, **kwargs)
+            print(f"end: {loop.time()} - {uuid_it}")
+            print(int(dict(output.raw_headers)[b'X-RateLimit-Remaining']))
+            #print(output)
+            return output
 
-                    return output
-                except RemoteProtocolError:
-                    continue
-            return await super().get(*args, **kwargs)
     async def post(self, *args, **kwargs):
+            loop = get_running_loop()
+            await self.rate_limiter.rate_limit()
+            uuid_it = uuid.uuid4()
+            print(f"start: {loop.time()} - {uuid_it}")
+            output = await super().post(*args, **kwargs)
+            print(f"end: {loop.time()} - {uuid_it}")
+            print(int(dict(output.raw_headers)[b'X-RateLimit-Remaining']))
+            #print(output)
+            return output
 
-            for i in range(self.number_of_tries):
-                try:
-                    loop = get_running_loop()
-                    await self.rate_limiter.rate_limit()
-                    uuid_it = uuid.uuid4()
-                    #print(f"start: {loop.time()} - {uuid_it}")
-                    output = await super().post(*args, **kwargs)
-                    #print(f"end: {loop.time()} - {uuid_it}")
-                    #print(output)
-                    return output
-                except RemoteProtocolError:
-                    continue
-            return await super().post(*args, **kwargs)
+
     
 
 @dataclass

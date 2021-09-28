@@ -3,9 +3,10 @@ from matchmaker.query_engine.query_types import PaperSearchQuery
 from matchmaker.query_engine.backends.pubmed_api import PubmedESearchQuery
 from matchmaker.query_engine.backends import NewAsyncClient
 import asyncio
-from httpx import AsyncClient
+
 import time
 from secret import pubmed_api_key
+import aiohttp
 d = {
     'tag': 'and',
     'fields_': [
@@ -38,7 +39,8 @@ async def main():
     awaitable, metadata = pub_searcher._query_to_awaitable(test)
     # Run native query
     print(awaitable)
-    async with NewAsyncClient() as client:
+    connector = aiohttp.TCPConnector(force_close=True)
+    async with NewAsyncClient(connector = connector) as client:
         test = await awaitable(client)
     return test
 results = asyncio.run(main())
