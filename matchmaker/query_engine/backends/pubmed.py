@@ -16,9 +16,10 @@ from matchmaker.query_engine.backends.pubmed_api import (
     PubmedAuthor, 
     elink_on_id_list, 
     efetch_on_id_list, 
-    esearch_on_query
+    esearch_on_query,
+    PubmedIndividual
 )
-
+from matchmaker.query_engine.backends.pubmed_processsors import process_institution, ProcessedEFetchData, ProcessedAuthor, ProcessedData
 from matchmaker.query_engine.query_types import And, Or, Title, AuthorName, Journal, Abstract, Institution, Keyword, Year, StringPredicate
 from typing import Annotated, Literal
 from pprint import pprint
@@ -28,8 +29,7 @@ from aiohttp import ClientSession
 from copy import copy
 
 
-class PubmedAuthorID(PubmedAuthor):
-    pass
+# TODO Use generators to pass information threough all levels
 
 and_int = And['PubMedAuthorSearchQuery']
 or_int = Or['PubMedAuthorSearchQuery']
@@ -49,6 +49,10 @@ and_int.update_forward_refs()
 or_int.update_forward_refs()
 PubMedAuthorSearchQuery.update_forward_refs()
 
+class PubmedNativeData(PubmedEFetchData):
+    references: List[PubmedEFetchData]
+    cited_by: List[PubmedEFetchData]
+
 
 class PubMedAuthorData(BaseModel):
     # TODO: implement this
@@ -64,13 +68,13 @@ def make_doi_search_term(doi_list):
 
 
 class PaperSearchQueryEngine(
-        BasePaperSearchQueryEngine[List[PubmedEFetchData], List[PubmedEFetchData]]):
+        BasePaperSearchQueryEngine[List[PubmedNativeData], List[PubmedNativeData]]):
     api_key:str
     def __init__(self, api_key, *args, **kwargs):
         self.api_key = api_key
         super().__init__(*args, **kwargs)
 
-    def _query_to_awaitable(self, query: PaperSearchQuery) -> List[PubmedEFetchData]:
+    def _query_to_awaitable(self, query: PaperSearchQuery) -> List[PubmedNativeData]:
         split_factor = 9
         print(query)
         async def make_coroutine(client: ClientSession):
@@ -138,7 +142,7 @@ class PaperSearchQueryEngine(
                     if id_list is not None:
                         id_mapper_papers[search_id] = [sub_paper_index[sub_id] for sub_id in id_list]
                     else:
-                        id_mapper_papers[search_id] = None
+                        id_mapper_papers[search_id] = []
                 return id_mapper_papers
             
             original_fetch_ids_future = get_running_loop().create_future()
@@ -187,17 +191,23 @@ class PaperSearchQueryEngine(
             new_sub_papers = []
             for i in sub_papers:
                 new_sub_papers += i
+            
             sub_paper_index = {i.paper_id.pubmed: i for i in new_sub_papers}
             references_set, cited_by_set = await gather(
                 get_papers_from_index(references_mapper, sub_paper_index),
                 get_papers_from_index(cited_by_mapper, sub_paper_index)
             )
+            native_papers = []
             for paper in papers:
                 pubmed_id = paper.paper_id.pubmed
-                paper.references = references_set[pubmed_id]
-                paper.cited_by = cited_by_set[pubmed_id]
+                native_paper = PubmedNativeData.parse_obj({
+                    **paper.dict(),
+                    'references': references_set[pubmed_id],
+                    'cited_by': cited_by_set[pubmed_id]
+                })
+                native_papers.append(native_paper)
 
-            return papers
+            return native_papers
         metadata = {
             'efetch': 1+split_factor,
             'esearch': 1,
@@ -205,13 +215,64 @@ class PaperSearchQueryEngine(
         }
         return make_coroutine, metadata
 
-    async def _post_process(self, query: PaperSearchQuery, data: List[PubmedEFetchData]) -> List[PubmedEFetchData]:
-        print('post_proc')
-        # TODO: implement this
-        pass
+    async def _post_process(self, query: PaperSearchQuery, data: List[PubmedNativeData]) -> List[ProcessedData]:
+        async def process_data_point(i):
+            async def process_authors(authors):
+                new_authors = []
+                for author in authors:
+                    inst = author.__root__.institution
+                    if inst is not None:
+                        proc_inst = process_institution(inst)
+                    else:
+                        proc_inst = None
+                    if isinstance(author.__root__, PubmedIndividual):
+                        new_author = ProcessedAuthor.parse_obj({
+                            **author.dict()['__root__'],
+                            'proc_institution': proc_inst
+                        })
+                    else:
+                        new_author = ProcessedAuthor.parse_obj({
+                            **author.dict()['__root__'],
+                            'proc_institution': proc_inst
+                        })
+                    new_authors.append(new_author)
+                return new_authors
+            authors = i.author_list
+            new_authors = await process_authors(authors)
+            refs = i.references
+            cited_by = i.cited_by
+            if refs is not None:
+                new_refs = []
+                for j in refs:
+                    refs_authors = j.author_list
+                    new_refs_authors = await process_authors(refs_authors)
+                    new_ref = ProcessedEFetchData.parse_obj({**j.dict(), 'author_list': new_refs_authors})
+                    new_refs.append(new_ref)
+            if cited_by is not None:
+                new_citeds = []
+                for j in cited_by:
+                    cited_authors = j.author_list
+                    new_cited_authors = await process_authors(cited_authors)
+                    new_cited = ProcessedEFetchData.parse_obj({**j.dict(), 'author_list': new_cited_authors})
+                    new_citeds.append(new_cited)
+            i_dict = i.dict()
+            i_dict['author_list'] = new_authors
+            i_dict['references'] = new_refs
+            i_dict['cited_by'] = new_citeds
+            return ProcessedData.parse_obj(i_dict)
 
-    def _data_from_processed(self, data: List[PubmedEFetchData]) -> List[PaperData]:
-        return [paper_from_native(datum) for datum in data]
+        coroutines = []
+        for i in data:
+            coroutines.append(process_data_point(i))
+        
+        results = await gather(*coroutines)
+        
+        return results
+
+
+    async def _data_from_processed(self, data: List[ProcessedData]) -> List[PaperData]:
+        return data
+        #return [paper_from_native(datum) for datum in data]
 
 class AuthorSearchQueryEngine(
         BasePaperSearchQueryEngine[List[PubMedAuthorData], List[PubMedAuthorData]]):
