@@ -3,7 +3,7 @@ from pydantic.generics import GenericModel
 from typing import Annotated, Generic, List, Literal, Type, TypeVar, Union
 from collections.abc import Container
 from numbers import Real
-from matchmaker.query_engine.id_types import PaperID
+from matchmaker.query_engine.id_types import IdQuery
 QueryType = TypeVar('QueryType')  # TODO: restrict to query types only
 
 
@@ -100,6 +100,10 @@ class Year(BaseModel):
     tag: Literal['year'] = 'year'
     operator: IntPredicate
 
+class Topic(BaseModel):
+    tag: Literal['topic'] = 'topic'
+    operator: StringPredicate
+
 
 # mypy currently can't handle recursive types:
 # https://github.com/python/mypy/issues/731
@@ -111,13 +115,15 @@ class PaperSearchQuery(BaseModel):
     Union[
         and_int,  # type: ignore[misc]
         or_int,  # type: ignore[misc]
+        IdQuery,
         Title,
         AuthorName,
         Journal,
         Abstract,
         Institution,
         Keyword,
-        Year],
+        Year,
+        Topic],
     Field(discriminator='tag')]
 
 and_int.update_forward_refs()
@@ -125,21 +131,22 @@ or_int.update_forward_refs()
 PaperSearchQuery.update_forward_refs()
 
 
-class Name(BaseModel):
-    tag: Literal['name'] = 'name'
-    operator: StringPredicate
 
+and_int = And['PaperSearchQuery']
+or_int = Or['PaperSearchQuery']
 
-# mypy currently can't handle recursive types:
-# https://github.com/python/mypy/issues/731
-AuthorSearchQuery = Annotated[  # type: ignore[misc]
+class AuthorSearchQuery(BaseModel):
+    __root__: Annotated[  # type: ignore[misc]
     Union[
-        And['AuthorSearchQuery'],  # type: ignore[misc]
-        Or['AuthorSearchQuery'],  # type: ignore[misc]
-        Name,
-        Institution],
+        and_int,  # type: ignore[misc]
+        or_int,  # type: ignore[misc]
+        AuthorName,
+        Institution,
+        #Topic
+        ],
     Field(discriminator='tag')]
 
 
-And['AuthorSearchQuery'].update_forward_refs()
-Or['AuthorSearchQuery'].update_forward_refs()
+and_int.update_forward_refs()
+or_int.update_forward_refs()
+AuthorSearchQuery.update_forward_refs()

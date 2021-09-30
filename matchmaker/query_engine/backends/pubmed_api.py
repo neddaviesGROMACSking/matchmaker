@@ -31,15 +31,15 @@ and_int = And['PubmedESearchQuery']
 or_int = Or['PubmedESearchQuery']
 
 class Pmid(BaseModel):
-    tag: Literal['Pmid'] = 'Pmid'
+    tag: Literal['pmid'] = 'pmid'
     operator: StringPredicate
 
 class ELocationID(BaseModel):
-    tag: Literal['ELocationID'] = 'ELocationID'
+    tag: Literal['elocationid'] = 'elocationid'
     operator: StringPredicate
 
 class MeshTopic(BaseModel):
-    tag: Literal['MeshTopic'] = 'MeshTopic'
+    tag: Literal['meshtopic'] = 'meshtopic'
     operator: StringPredicate
 
 class PubmedESearchQuery(BaseModel):
@@ -99,6 +99,18 @@ async def esearch_on_query(
         elif query['tag'] == 'or':
             fields = query['fields_']
             return '('+' OR '.join([query_to_term(field) for field in fields])+')'
+        elif query['tag'] == 'pmid':
+            operator = query['operator']
+            value = operator['value']
+            return make_string_term('PMID', value, operator)
+        elif query['tag'] == 'meshtopic':
+            operator = query['operator']
+            value = operator['value']
+            return make_string_term('MeSH Major Topic', value, operator)
+        elif query['tag'] == 'elocationid':
+            operator = query['operator']
+            value = operator['value']
+            return make_string_term('Location ID', value, operator)
         elif query['tag'] == 'title':
             operator = query['operator']
             value = operator['value']

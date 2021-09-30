@@ -1,7 +1,7 @@
 from matchmaker.query_engine.backends.pubmed import PaperSearchQueryEngine
 from matchmaker.query_engine.query_types import PaperSearchQuery
 from matchmaker.query_engine.backends.pubmed_api import PubmedESearchQuery
-from matchmaker.query_engine.backends import NewAsyncClient
+from matchmaker.query_engine.backends import NewAsyncClient, RateLimiter
 import asyncio
 
 import time
@@ -28,9 +28,9 @@ d = {
     ]
 }
 
+rate_limiter = RateLimiter()
 
-pub_searcher = PaperSearchQueryEngine(api_key=pubmed_api_key)
-
+pub_searcher = PaperSearchQueryEngine(pubmed_api_key, rate_limiter)
 
 start = time.time()
 async def main():
@@ -44,6 +44,6 @@ async def main():
     return proc_result
 results = asyncio.run(main())
 print(len(str(results)))
-print(results[-1])
+#print(results[-1])
 end = time.time()
 print(end-start)

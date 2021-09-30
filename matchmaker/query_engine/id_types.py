@@ -1,7 +1,8 @@
 from pydantic import BaseModel, root_validator
-from typing import Optional
-
+from typing import Optional, Literal
+from enum import Enum
 # Datatype invarient: Every field of this model uniquely identifies a paper
+
 class PaperID(BaseModel):
     doi: Optional[str] = None
     pubmed_id: Optional[str] = None
@@ -15,3 +16,13 @@ class PaperID(BaseModel):
         if len(selected_ids)==0:
             raise ValueError('No ids selected')
         return values
+
+class IdTypeEnum(Enum):
+    doi: str = 'doi'
+    pubmed_id: str = 'pubmed_id'
+    scopus_id: str = 'scopus_id'
+
+class IdQuery(BaseModel):
+    tag: Literal['id'] = 'id'
+    id_value: str
+    id_type: IdTypeEnum

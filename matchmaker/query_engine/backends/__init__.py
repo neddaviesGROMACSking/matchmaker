@@ -44,7 +44,7 @@ class RateLimiter:
 class NewAsyncClient(ClientSession):
     rate_limiter: RateLimiter
 
-    def __init__(self, *args, rate_limiter: RateLimiter = RateLimiter(), **kwargs):
+    def __init__(self, rate_limiter: RateLimiter = RateLimiter(), *args, **kwargs):
         self.rate_limiter = rate_limiter
         super().__init__(*args, **kwargs)
     async def get(self, *args, **kwargs):
@@ -78,6 +78,10 @@ class BaseBackendQueryEngine(
     Generic[Query, NativeData, ProcessedNativeData, Data], 
     SlightlyLessAbstractQueryEngine[Query, BaseNativeQuery[NativeData], NativeData, ProcessedNativeData, Data]
 ):
+    def __init__(self, rate_limiter = RateLimiter(), *args, **kwargs):
+        self.rate_limiter = rate_limiter
+        super().__init__(*args, **kwargs)
+    
     def _query_to_awaitable(self, query: Query) -> Tuple[coroutine, Dict[str, str]]:
         raise NotImplementedError('This method is required for query_to_native')
     async def _query_to_native(self, query: Query) -> BaseNativeQuery[NativeData]:
@@ -87,7 +91,7 @@ class BaseBackendQueryEngine(
     async def _run_native_query(self, query: BaseNativeQuery[NativeData]) -> NativeData:
         print('here')
         connector = TCPConnector(force_close=True)
-        async with NewAsyncClient(connector = connector) as client:
+        async with NewAsyncClient(connector = connector, rate_limiter = self.rate_limiter) as client:
             results = await query.coroutine_function(client)
         return results
     
