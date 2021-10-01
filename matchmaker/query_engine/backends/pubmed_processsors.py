@@ -10,11 +10,11 @@ class ProcessedAuthorBase(BaseModel):
 
 class ProcessedIndividual(ProcessedAuthorBase):
     last_name: str
-    fore_name: str
-    initials: str
+    fore_name: Optional[str]
+    initials: Optional[str]
 
 class ProcessedCollective(ProcessedAuthorBase):
-    collective_name:str
+    collective_name: str
 
 
 class ProcessedAuthor(BaseModel):

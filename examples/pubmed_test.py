@@ -43,7 +43,7 @@ async def main():
     proc_result = await pub_searcher(query)
     return proc_result
 results = asyncio.run(main())
-print(results[0])
+#print(results[0])
 print(len(str(results)))
 #print(results[-1])
 end = time.time()

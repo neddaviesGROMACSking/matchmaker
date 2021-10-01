@@ -264,8 +264,8 @@ class PubmedAuthorBase(BaseModel):
 
 class PubmedIndividual(PubmedAuthorBase):
     last_name: str
-    fore_name: str
-    initials: str
+    fore_name: Optional[str]
+    initials: Optional[str]
 
 class PubmedCollective(PubmedAuthorBase):
     collective_name:str
@@ -440,7 +440,10 @@ async def efetch_on_id_list(
                 institution = None
                 #proc_institution = None
             if last_name_elem is None:
-                collective = author.find('CollectiveName').text
+                collective_item = author.find('CollectiveName')
+                if collective_item is None:
+                    raise ValueError('CollectiveName not found')
+                collective = collective_item.text
                 author_final = PubmedAuthor.parse_obj({
                     'collective_name': collective,
                     'institution': institution,
@@ -448,8 +451,16 @@ async def efetch_on_id_list(
                 })
             else:
                 last_name = last_name_elem.text
-                fore_name = author.find('ForeName').text
-                initials = author.find('Initials').text
+                fore_name_item = author.find('ForeName')
+                if fore_name_item is None:
+                    fore_name = None
+                else:
+                    fore_name = fore_name_item.text
+                initials_item = author.find('Initials')
+                if initials_item is None:
+                    initials = None
+                else:
+                    initials = initials_item.text
                 author_final = PubmedAuthor.parse_obj({
                     'last_name': last_name, 
                     'fore_name': fore_name,

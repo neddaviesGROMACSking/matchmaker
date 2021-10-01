@@ -366,7 +366,7 @@ class PaperSearchQueryEngine(
                 'cited_by': new_cited_bys
             }
         
-        pprint(data[0].dict())
+
         new_data = []
         for i in data:
             data_dict = i.dict()
@@ -565,7 +565,38 @@ class AuthorSearchQueryEngine(
         return processed_author_data
 
     async def _data_from_processed(self, data: List[ProcessedAuthorData]) -> List[AuthorData]:
-        return data
+
+        new_data = []
+        for i in data:
+            data_dict = i.dict()
+            author_info = data_dict['author']
+            paper_count = data_dict['paper_count']
+            paper_ids = []
+            for i in data_dict['papers']:
+                paper_id = i['paper_id']
+                doi = paper_id['doi']
+                pubmed_id = paper_id['pubmed']
+                paper_ids.append(
+                    {
+                        'doi': doi,
+                        'pubmed_id': pubmed_id
+                    }
+                )
+            new_data.append(AuthorData.parse_obj({
+                'preferred_name': {
+                    'surname': author_info['last_name'],
+                    'given_names': author_info['fore_name'],
+                    'initials': author_info['initials']
+                },
+                'institution_current': {
+                    'name': author_info['institution'],
+                    'processed': author_info['proc_institution']
+                },
+                'paper_count': paper_count,
+                'paper_ids': paper_ids
+            }))
+        #pprint([i.dict() for i in new_data])
+        return new_data
         #return [paper_from_native(datum) for datum in data]
 
 

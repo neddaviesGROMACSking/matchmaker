@@ -31,6 +31,7 @@ async def main():
     return proc_result
 results = asyncio.run(main())
 print(len(str(results)))
+
 print(results[0])
 end = time.time()
 print(end-start)
