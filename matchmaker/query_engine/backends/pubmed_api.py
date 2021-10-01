@@ -396,7 +396,11 @@ async def efetch_on_id_list(
             year_pub = year_pub_list[0].text
         else:
             year_pub = None
-        title = ' '.join(article.find('ArticleTitle').itertext())
+        
+        title_item = article.find('ArticleTitle')
+        if title_item is None:
+            raise ValueError('ArticleTitle not found')
+        title = ' '.join(title_item.itertext())
         abstract = article.find('Abstract')
         if abstract is not None:
             abstract_text_list = abstract.findall('AbstractText')
