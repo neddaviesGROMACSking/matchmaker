@@ -335,14 +335,25 @@ async def efetch_on_id_list(
     for i in proc_out:
 
         medline_citation = i.find('MedlineCitation')
+        if medline_citation is None:
+            raise ValueError('Medline Citation not found')
+
         pubmed_data = i.find('PubmedData')
+        if pubmed_data is None:
+            raise ValueError('PubmedData not found')
+
 
         article_id_list = pubmed_data.find('ArticleIdList')
+        if article_id_list is None:
+            raise ValueError('ArticleIdList not found')
+        
         articles = article_id_list.findall('ArticleId')
         ids_available= {i.attrib['IdType']: i.text for i in article_id_list}
 
         #pubmed_id = medline_citation.find('PMID').text
         article = medline_citation.find('Article')
+        if article is None:
+            raise ValueError('Article not found')
         keywordlist = medline_citation.find('KeywordList')
         if keywordlist is not None:
             keyword_text = [i.text for i in keywordlist.findall('Keyword')]
@@ -354,7 +365,10 @@ async def efetch_on_id_list(
         if mesh_headings is not None:
             mesh_heading_list = mesh_headings.findall('MeshHeading')
             for mesh_heading in mesh_heading_list:
-                descriptor = mesh_heading.find('DescriptorName').text
+                descriptor = mesh_heading.find('DescriptorName')
+                if descriptor is None:
+                    raise ValueError('DescriptorName not found')
+                descriptor_text = descriptor.text
                 qualifier = mesh_heading.find('QualifierName')
                 if qualifier is not None:
                     if isinstance(qualifier, list):
@@ -364,11 +378,19 @@ async def efetch_on_id_list(
                 else:
                     new_qualifier = None
                 topics.append(
-                    PubmedTopic(descriptor= descriptor,qualifier = new_qualifier)
+                    PubmedTopic(descriptor= descriptor_text,qualifier = new_qualifier)
                 )
         journal = article.find('Journal')
-        journal_title = journal.find('Title').text
-        journal_title_abr = journal.find('ISOAbbreviation').text
+        if journal is None:
+            raise ValueError('Journal not found')
+        journal_title_item = journal.find('Title')
+        if journal_title_item is None:
+            raise ValueError('Title not found')
+        journal_title = journal_title_item.text
+        journal_title_abr_item = journal.find('ISOAbbreviation')
+        if journal_title_abr_item is None:
+            raise ValueError('ISOAbbreviation not found')
+        journal_title_abr = journal_title_abr_item.text
         year_pub_list = [i for i in journal.iter('Year')]
         if len(year_pub_list) == 1:
             year_pub = year_pub_list[0].text

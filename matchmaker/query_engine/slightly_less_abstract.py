@@ -28,4 +28,4 @@ class SlightlyLessAbstractQueryEngine(Generic[Query, NativeQuery, NativeData, Pr
         raise NotImplementedError('Calling method on abstract base class')
     def __call__(self, query: Query) -> Data:
         nd = self._run_native_query(self._query_to_native(query))
-        return self._data_from_native(self._post_process(query, nd))
+        return self._data_from_processed(self._post_process(query, nd))

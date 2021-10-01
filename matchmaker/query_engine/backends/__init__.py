@@ -82,7 +82,7 @@ class BaseBackendQueryEngine(
         self.rate_limiter = rate_limiter
         super().__init__(*args, **kwargs)
     
-    def _query_to_awaitable(self, query: Query) -> Tuple[coroutine, Dict[str, str]]:
+    def _query_to_awaitable(self, query: Query) -> Tuple[Callable[[NewAsyncClient], Awaitable[NativeData]], Dict[str, str]]:
         raise NotImplementedError('This method is required for query_to_native')
     async def _query_to_native(self, query: Query) -> BaseNativeQuery[NativeData]:
         awaitable, metadata = self._query_to_awaitable(query)
@@ -95,8 +95,8 @@ class BaseBackendQueryEngine(
             results = await query.coroutine_function(client)
         return results
     
-    async def _post_process(self, query: BaseNativeQuery[NativeData], data: NativeData) -> ProcessedNativeData:
-        return data
+    async def _post_process(self, query: Query, data: NativeData) -> ProcessedNativeData:
+        raise NotImplementedError('Calling method on abstract base class')
 
     async def _data_from_processed(self, data: ProcessedNativeData) -> Data:
         raise NotImplementedError('Calling method on abstract base class')

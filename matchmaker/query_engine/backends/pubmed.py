@@ -1,10 +1,8 @@
 from pydantic import BaseModel, Field
-from typing import List, Union, Literal, Optional, Any
 
 from matchmaker.query_engine.query_types import PaperSearchQuery, \
         AuthorSearchQuery
 from matchmaker.query_engine.data_types import PaperData, AuthorData
-from matchmaker.query_engine.slightly_less_abstract import SlightlyLessAbstractQueryEngine
 from matchmaker.query_engine.backend import Backend
 from matchmaker.query_engine.backends import BasePaperSearchQueryEngine, BaseAuthorSearchQueryEngine, BaseBackendQueryEngine, NewAsyncClient, RateLimiter
 from matchmaker.query_engine.backends.pubmed_api import (
@@ -21,9 +19,9 @@ from matchmaker.query_engine.backends.pubmed_api import (
 )
 from matchmaker.query_engine.backends.pubmed_processsors import process_institution, ProcessedEFetchData, ProcessedAuthor, ProcessedData, ProcessedIndividual
 from matchmaker.query_engine.query_types import And, Or, Title, AuthorName, Journal, Abstract, Institution, Keyword, Year, StringPredicate
-from typing import Annotated, Literal, Callable, Awaitable, Tuple, Dict
+from typing import Annotated, Callable, Awaitable, Tuple, Dict, List, Union
 from pprint import pprint
-from asyncio import Future, get_running_loop, gather, create_task
+from asyncio import get_running_loop, gather
 
 from aiohttp import ClientSession
 from copy import copy
@@ -55,8 +53,10 @@ class PubmedNativeData(PubmedEFetchData):
 
 
 class ProcessedAuthorData(BaseModel):
-    # TODO: implement this
-    pass
+    author: ProcessedAuthor
+    papers: List[PubmedNativeData]
+    paper_count: int
+
 
 def paper_from_native(data):
     raise NotImplementedError('TODO')
@@ -72,7 +72,7 @@ def construct_make_coroutine_for_paper_query(
     query: PubmedESearchQuery,
     split_factor: int
 ) -> Callable[[NewAsyncClient], Awaitable[List[PubmedNativeData]]]:
-    async def make_coroutine(client: ClientSession) -> Awaitable[List[PubmedNativeData]]:
+    async def make_coroutine(client: ClientSession) -> List[PubmedNativeData]:
         async def esearch_on_query_set_future(id_list_future, query, client):
 
             output = await esearch_on_query(query, client, api_key=query_engine.api_key)
@@ -242,15 +242,15 @@ async def process_paper_institutions(i):
     new_authors = await process_authors(authors)
     refs = i.references
     cited_by = i.cited_by
+    new_refs = []
     if refs is not None:
-        new_refs = []
         for j in refs:
             refs_authors = j.author_list
             new_refs_authors = await process_authors(refs_authors)
             new_ref = ProcessedEFetchData.parse_obj({**j.dict(), 'author_list': new_refs_authors})
             new_refs.append(new_ref)
+    new_citeds = []
     if cited_by is not None:
-        new_citeds = []
         for j in cited_by:
             cited_authors = j.author_list
             new_cited_authors = await process_authors(cited_authors)
@@ -289,12 +289,10 @@ class PaperSearchQueryEngine(
         return make_coroutine, metadata
 
     async def _post_process(self, query: PaperSearchQuery, data: List[PubmedNativeData]) -> List[ProcessedData]:
-        coroutines = []
+        results = []
         for i in data:
-            coroutines.append(process_paper_institutions(i))
-        
-        results = await gather(*coroutines)
-        
+            results.append(await process_paper_institutions(i))
+
         return results
 
 
@@ -316,7 +314,7 @@ class AuthorSearchQueryEngine(
         ], 
         Dict[str,int]
     ]:
-        async def make_coroutine(client: ClientSession) -> Awaitable[List[PubmedNativeData]]:
+        async def make_coroutine(client: ClientSession) -> List[PubmedNativeData]:
             pubmed_paper_query = author_query_to_esearch(query)
             output = await esearch_on_query(query, client, api_key=self.api_key)
             id_list = output.pubmed_id_list
@@ -402,25 +400,24 @@ class AuthorSearchQueryEngine(
             else:
                 return False
 
-
+        def authors_match(author1, author2):
+            proc_institution1 = author1.dict()['__root__']['proc_institution']
+            proc_institution2 = author2.dict()['__root__']['proc_institution']
+            if author1 == author2:
+                return True
+            elif institution_matches(proc_institution1, proc_institution2):
+                return True
+            else:
+                return False
         def group_by_location(filtered_authors):
             set_list = []
             final_list = []
             for i in filtered_authors:
-                author1 = i.dict()['__root__']
-                proc_institution1 = author1['proc_institution']
                 match_authors = []
                 for j in filtered_authors:
-                    author2 = j.dict()['__root__']
-                    proc_institution2 = author2['proc_institution']
-                    if author1 == author2:
-                        match_authors.append(author2)
-                    if (
-                        institution_matches(proc_institution1, proc_institution2)
-                            ) and (
-                                author2 not in match_authors):
-                        match_authors.append(author2)
-                #print(match_authors)
+
+                    if authors_match(i,j) and j not in match_authors:
+                        match_authors.append(j)
                 if match_authors not in final_list:
                     final_list.append(match_authors)
             
@@ -435,8 +432,6 @@ class AuthorSearchQueryEngine(
                 if location not in finals:
                     finals.append(location)
             return finals
-
-        
         
         coroutines = []
         for i in data:
@@ -451,7 +446,6 @@ class AuthorSearchQueryEngine(
 
         query_dict = query.dict()['__root__']
 
-        #searched_author = query.__root__.author_name
         filtered_authors = []
         for i in combined_authors:
             author = i.__root__
@@ -463,23 +457,36 @@ class AuthorSearchQueryEngine(
                 last_is_present = query_to_func(institution, last_name, None)(query_dict)
                 fore_is_present = query_to_func(institution, fore_name, None)(query_dict)
                 is_present = fore_is_present and last_is_present
-                #print(is_present)
             else:
                 collective_name = author.collective_name
                 is_present = query_to_func(institution, collective_name, None)(query_dict)
-                #print(is_present)
             if is_present and i not in filtered_authors:
                 filtered_authors.append(i)
 
         location_groups = group_by_location(filtered_authors)
         finals = pick_largest_from_group(location_groups)
 
-        repackaged = [ProcessedAuthor.parse_obj(i) for i in finals]
-        for author in repackaged:
+        processed_author_data = []
+        for author1 in finals:
+            associated_with_author = []
             for paper in results:
-                pass
-                #if author in paper.author_list:
-        return repackaged
+                author_list = paper.author_list
+                paper_dict = paper.dict()
+                for author2 in author_list:
+                    if authors_match(author1, author2) and paper_dict not in associated_with_author:
+                        associated_with_author.append(paper_dict)
+            paper_count = len(associated_with_author)
+            processed_author_data.append(
+                ProcessedAuthorData.parse_obj(
+                    {
+                        'author': author1.dict()['__root__'],
+                        'papers': associated_with_author,
+                        'paper_count': paper_count
+                    }
+                )
+            )
+
+        return processed_author_data
 
     async def _data_from_processed(self, data: List[ProcessedAuthorData]) -> List[AuthorData]:
         return data
