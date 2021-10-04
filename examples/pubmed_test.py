@@ -35,11 +35,6 @@ pub_searcher = PaperSearchQueryEngine(pubmed_api_key, rate_limiter)
 start = time.time()
 async def main():
     query = PaperSearchQuery.parse_obj(d)
-    #test = await pub_searcher._query_to_native(query)
-    #awaitable = test.coroutine_function
-    #metadata = test.metadata
-    #unproc_result = await pub_searcher._run_native_query(test)
-    #proc_result = await pub_searcher._post_process(query, unproc_result)
     proc_result = await pub_searcher(query)
     return proc_result
 results = asyncio.run(main())

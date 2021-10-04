@@ -172,7 +172,6 @@ async def esearch_on_query(
     search_url = make_search_given_term(term, api_key=api_key)
 
     output = await client.get(search_url)
-    #print(output)
     print('search')
     raw_out = await output.text()
     proc_out = xml_parse.fromstring(raw_out)
@@ -224,7 +223,6 @@ async def elink_on_id_list(
     linkname = query.linkname
     url = make_elink_url(id_list, linkname, api_key = api_key)
     output = await client.get(url)
-    #print(output)
     print('link')
     raw_references = await output.text()
     proc_ref = xmltodict.parse(raw_references)
@@ -260,7 +258,6 @@ class PubmedTopic(BaseModel):
 
 class PubmedAuthorBase(BaseModel):
     institution: Optional[str]
-    #proc_institution: Optional[List[Tuple[str, str]]]
 
 class PubmedIndividual(PubmedAuthorBase):
     last_name: str
@@ -314,22 +311,18 @@ async def efetch_on_id_list(
         prefix= 'https://eutils.ncbi.nlm.nih.gov/entrez/eutils/',
         api_key: str = None
     ):
-        #print(api_key)
         if api_key is None:
             return f'{prefix}efetch.fcgi?db=pubmed&retmode=xml&id={",".join(id_list)}'
         else:
             return f'{prefix}efetch.fcgi?db=pubmed&retmode=xml&api_key={api_key}&id={",".join(id_list)}'
     id_list = query.pubmed_id_list
     fetch_url = make_fetch_given_ids(id_list, api_key=api_key)
-    #print(id_list)
     if len(id_list)>200:
         output = await client.post(make_fetch_given_ids([''], api_key=api_key), data = {'id': id_list})
     else:
         output = await client.get(fetch_url)
     print('fetch')
-    #print(output)
     raw_fetch_out = await output.text()
-    #print(raw_fetch_out)
     proc_out = xml_parse.fromstring(raw_fetch_out)
     papers = []
     for i in proc_out:
@@ -434,11 +427,13 @@ async def efetch_on_id_list(
             last_name_elem = author.find('LastName')
             affiliation_info = author.find("AffiliationInfo")
             if affiliation_info is not None:
-                institution = affiliation_info.find('Affiliation').text
-                #proc_institution = process_institution(institution)
+                affiliation_item = affiliation_info.find('Affiliation')
+                if affiliation_item is not None:
+                    institution = affiliation_item.text
+                else:
+                    institution = None
             else:
                 institution = None
-                #proc_institution = None
             if last_name_elem is None:
                 collective_item = author.find('CollectiveName')
                 if collective_item is None:
@@ -447,7 +442,6 @@ async def efetch_on_id_list(
                 author_final = PubmedAuthor.parse_obj({
                     'collective_name': collective,
                     'institution': institution,
-                    #'proc_institution': proc_institution
                 })
             else:
                 last_name = last_name_elem.text
@@ -466,7 +460,6 @@ async def efetch_on_id_list(
                     'fore_name': fore_name,
                     'initials': initials,
                     'institution': institution,
-                    #'proc_institution': proc_institution
                 })
             author_list_proc.append(author_final)            
             

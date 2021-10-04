@@ -595,14 +595,23 @@ class AuthorSearchQueryEngine(
                 'paper_count': paper_count,
                 'paper_ids': paper_ids
             }))
-        #pprint([i.dict() for i in new_data])
         return new_data
-        #return [paper_from_native(datum) for datum in data]
+
 
 
 class PubMedBackend(Backend):
+    def __init__(self, api_key: str, max_requests_per_second: int = 9):
+        self.api_key = api_key
+        self.rate_limiter = RateLimiter(max_requests_per_second = max_requests_per_second)
+    
     def paperSearchEngine(self) -> PaperSearchQueryEngine:
-        return PaperSearchQueryEngine()
+        return PaperSearchQueryEngine(
+            api_key = self.api_key, 
+            rate_limiter=self.rate_limiter
+        )
 
     def authorSearchEngine(self) -> AuthorSearchQueryEngine:
-        return AuthorSearchQueryEngine()
+        return AuthorSearchQueryEngine(
+            api_key = self.api_key, 
+            rate_limiter=self.rate_limiter
+        )

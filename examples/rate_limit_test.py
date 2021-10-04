@@ -8,8 +8,6 @@ async def main():
         for i in range(9):
             async def evaluate_url(url):
                 result = await client.get(url)
-                #print(result)
-                #print(time.time())
                 return result
                 
             result = evaluate_url('https://dreamingspires.dev/')
