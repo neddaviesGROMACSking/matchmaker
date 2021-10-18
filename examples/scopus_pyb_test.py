@@ -2,10 +2,10 @@ from matchmaker.query_engine.backends.scopus_utils import create_config
 from secret import scopus_inst_token, scopus_api_key
 #from matchmaker.query_engine.backends.scopus import ScopusSearch
 from pybliometrics.scopus import ScopusSearch, AffiliationSearch, AuthorSearch
-from typing import Optional
+from typing import Optional, List
 import requests
 from matchmaker.query_engine.backends.scopus_quota_cache import get_remaining_in_cache, get_reset_in_cache, store_quota_in_cache
-
+from matchmaker.query_engine.backends.scopus_api_new import AffiliationSearchResult, AuthorSearchResult, ScopusSearchResult
 from pprint import pprint
 
 #get_remaining_in_cache('AuthorSearch', 3434)
@@ -15,50 +15,6 @@ scopus_results = ScopusSearch("AUTH(Jeremy Green)")
 
 from pydantic import BaseModel
 
-class ScopusSearchResult(BaseModel):
-    eid:Optional[str]
-    doi: Optional[str]
-    pii: Optional[str]
-    pubmed_id: Optional[str]
-    title: Optional[str]
-    subtype: Optional[str]
-    subtypeDescription: Optional[str]
-    creator: Optional[str]
-    afid: Optional[str]
-    affilname: Optional[str]
-    affiliation_city: Optional[str]
-    affiliation_country: Optional[str]
-    author_count: Optional[str]
-    author_names: Optional[str]
-    author_ids: Optional[str]
-    author_afids: Optional[str]
-    coverDate: Optional[str]
-    coverDisplayDate: Optional[str]
-    publicationName: Optional[str]
-    issn: Optional[str]
-    source_id: Optional[str]
-    eIssn: Optional[str]
-    aggregationType: Optional[str]
-    volume: Optional[str]
-    issueIdentifier: Optional[str]
-    article_number: Optional[str]
-    pageRange: Optional[str]
-    description: Optional[str]
-    authkeywords: Optional[str]
-    citedby_count: Optional[str]
-    openaccess: Optional[str]
-    fund_acr: Optional[str]
-    fund_no: Optional[str]
-    fund_sponsor: Optional[str]
-
-class AffiliationSearchResult(BaseModel):
-    eid: str
-    name: str
-    variant: Optional[str]
-    documents: int
-    city: str
-    country: str
-    parent: str
 
 #new_results = []
 paper_results = scopus_results.results
@@ -81,10 +37,21 @@ for affiliation in affil_results:
     new_afids.append(proc_result.eid.split('-')[-1])
 #print(new_results[0])
 #print(new_afids)
-query = f"AF-ID({new_afids[0]}) AND ((AUTHLASTNAME(GREENNN) AND AUTHFIRST(JEREMY)) OR (AUTHLASTNAME(ROWLANDS) AND AUTHFIRST(IAN)))"
+query = f"AF-ID({new_afids[0]}) AND ((AUTHLASTNAME(GREEN) AND AUTHFIRST(JEREMY)) OR (AUTHLASTNAME(ROWLANDS) AND AUTHFIRST(IAN)))"
 #print(query)
 author_results = AuthorSearch(query, verbose = True)
+for author in author_results.authors:
+    subject_list = author.areas.split('; ')
+    subject_list_proc = []
+    for i in subject_list:
+        subject = i[0:4]
+        doc_count = i[6:-1]
+        subject_list_proc.append({
+            'name': subject,
+            'doc_count': doc_count
+        })
 
+    print(subject_list_proc)
 
 store_quota_in_cache(author_results)
 

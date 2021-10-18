@@ -34,7 +34,6 @@ def _get_quota_in_cache_inner(search_name: str, index:int):
     path_new = str(DEFAULT_PATHS[search_name]) + '/quota_cache.csv'
     with open(path_new, 'r') as csvfile:
         file_reader = csv.reader(csvfile, delimiter=',')
-        print('here')
         output = list(file_reader)
         if output == []:
             raise ValueError('Cache is empty!')
