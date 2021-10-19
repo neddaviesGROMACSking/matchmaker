@@ -42,5 +42,5 @@ async def main():
 
     paper_results = await paper_searcher(paper_search)
     author_results = await author_searcher(author_search)
-
-asyncio.run(main())
+    return paper_results
+paper_results = asyncio.run(main())

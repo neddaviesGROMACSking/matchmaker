@@ -5,14 +5,19 @@ from pybliometrics.scopus import ScopusSearch, AffiliationSearch, AuthorSearch
 from typing import Optional, List
 
 from matchmaker.query_engine.backends.scopus_quota_cache import get_remaining_in_cache, get_reset_in_cache, store_quota_in_cache
-from matchmaker.query_engine.backends.scopus_api_new import AffiliationSearchResult, AuthorSearchResult, ScopusSearchResult
+from matchmaker.query_engine.backends.scopus_api_new import AffiliationSearchResult, AuthorSearchResult, ScopusSearchResult, get_scopus_query_remaining_in_cache
 from pprint import pprint
 
 #get_remaining_in_cache('AuthorSearch', 3434)
 create_config(scopus_api_key, scopus_inst_token)
-
-scopus_results = ScopusSearch("AUTH(Jeremy Green)")
+print(get_scopus_query_remaining_in_cache())
+#scopus_results = ScopusSearch("AUTH(Quinno Green)")
+scopus_results = ScopusSearch("AUTH(Q Green)", view ='STANDARD')
+print(scopus_results.get_results_size())
+store_quota_in_cache(scopus_results)
+print(get_scopus_query_remaining_in_cache())
 #scopus_results = ScopusSearch("AUTHOR-NAME(Green, j) AND AFFIL(Kings College London)")
+"""
 from pydantic import BaseModel
 print(scopus_results)
 
@@ -41,8 +46,9 @@ query = f"AF-ID({new_afids[0]}) AND ((AUTHLASTNAME(GREEN) AND AUTHFIRST(JEREMY))
 #print(query)
 author_results = AuthorSearch(query, verbose = True)
 new_author_results = []
+
 for author in author_results.authors:
-    """
+    ""
     # For post process
     subject_list = author.areas.split('; ')
     subject_list_proc = []
@@ -53,7 +59,7 @@ for author in author_results.authors:
             'name': subject,
             'doc_count': doc_count
         })
-    """
+    ""
     dict_result = author._asdict()
     new_author = AuthorSearchResult.parse_obj(dict_result)
     new_author_results.append(new_author)
@@ -63,3 +69,4 @@ store_quota_in_cache(author_results)
 
 print(get_remaining_in_cache(author_results))
 print(get_reset_in_cache(author_results))
+"""

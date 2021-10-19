@@ -30,7 +30,7 @@ def store_quota_in_cache(results):
     else:
         store_quota_in_cache_inner(search_name, remaining, reset)
 
-def _get_quota_in_cache_inner(search_name: str, index:int):
+def _get_quota_in_cache_inner(search_name: str, index:int) -> str:
     if search_name not in DEFAULT_PATHS:
         raise NotImplementedError # TODO Implement
     path_new = str(DEFAULT_PATHS[search_name]) + '/quota_cache.csv'
@@ -46,12 +46,12 @@ def _get_quota_in_cache_inner(search_name: str, index:int):
                 min_remaining = row[index]
             else:
                 min_remaining = min(row[index], min_remaining)
+    if min_remaining is None:
+        raise TypeError(f'{min_remaining} is None')
     return min_remaining
-def get_remaining_in_cache(results):
-    search_name = results.__class__.__name__
-    return _get_quota_in_cache_inner(search_name, 0)
-def get_reset_in_cache(results):
-    search_name = results.__class__.__name__
+def get_remaining_in_cache(search_name: str) -> int:
+    return int(_get_quota_in_cache_inner(search_name, 0))
+def get_reset_in_cache(search_name: str) -> str:
     return _get_quota_in_cache_inner(search_name, 1)
 
 
