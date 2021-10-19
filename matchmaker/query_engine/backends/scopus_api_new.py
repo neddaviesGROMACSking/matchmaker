@@ -227,7 +227,7 @@ class AuthorSearchResult(BaseModel):
     givenname: Optional[str]
     affiliation: Optional[str]
     documents: int
-    affiliation_id: str
+    affiliation_id: Optional[str]
     city: Optional[str]
     country: Optional[str]
     areas: Optional[str]
@@ -263,12 +263,12 @@ or_int.update_forward_refs()
 
 class AffiliationSearchResult(BaseModel):
     eid: str
-    name: str
+    name: Optional[str]
     variant: Optional[str]
     documents: int
-    city: str
-    country: str
-    parent: str
+    city: Optional[str]
+    country: Optional[str]
+    parent: Optional[str]
 
 and_int = And['AffiliationSearchQuery']
 or_int = Or['AffiliationSearchQuery']
@@ -317,9 +317,7 @@ def get_scopus_query_no_requests(
 def get_scopus_query_remaining_in_cache() -> int:
     try:
         return get_remaining_in_cache('ScopusSearch')
-    except FileNotFoundError:
-        return Allowance.SCOPUS_START_ALLOWANCE
-    except ValueError:
+    except TypeError:
         return Allowance.SCOPUS_START_ALLOWANCE
 
 def author_search_on_query(
@@ -347,9 +345,7 @@ def get_author_query_no_requests(
 def get_author_query_remaining_in_cache() -> int:
     try:
         return get_remaining_in_cache('AuthorSearch')
-    except FileNotFoundError:
-        return Allowance.AUTH_START_ALLOWANCE
-    except ValueError:
+    except TypeError:
         return Allowance.AUTH_START_ALLOWANCE
 
 def affiliation_search_on_query(
@@ -377,8 +373,6 @@ def get_affiliation_query_no_requests(
 def get_affiliation_query_remaining_in_cache() -> int:
     try:
         return get_remaining_in_cache('AffiliationSearch')
-    except FileNotFoundError:
-        return Allowance.AFFIL_START_ALLOWANCE
-    except ValueError:
+    except TypeError:
         return Allowance.AFFIL_START_ALLOWANCE
 

@@ -8,15 +8,18 @@ def store_quota_in_cache(results):
         if search_name not in DEFAULT_PATHS:
             raise NotImplementedError # TODO Implement
         path_new = str(DEFAULT_PATHS[search_name]) + '/quota_cache.csv'
-        with open(path_new, 'r', newline='') as csvfile:
-            file_reader = csv.reader(csvfile, delimiter=',')
-            file_reader_list = list(file_reader)
-            if file_reader_list !=[]:
-                reset_time_str = file_reader_list[0][1]
-                reset_time = time.mktime(datetime.strptime(reset_time_str, "%Y-%m-%d %H:%M:%S").timetuple())
-                current_time = time.time()
-                if float(reset_time) < current_time:
-                    csvfile.truncate(0)
+        try:
+            with open(path_new, 'r', newline='') as csvfile:
+                file_reader = csv.reader(csvfile, delimiter=',')
+                file_reader_list = list(file_reader)
+                if file_reader_list !=[]:
+                    reset_time_str = file_reader_list[0][1]
+                    reset_time = time.mktime(datetime.strptime(reset_time_str, "%Y-%m-%d %H:%M:%S").timetuple())
+                    current_time = time.time()
+                    if float(reset_time) < current_time:
+                        csvfile.truncate(0)
+        except FileNotFoundError:
+            pass
         with open(path_new, 'a+', newline='') as csvfile:
             file_writer = csv.writer(csvfile, delimiter=',')
             file_writer.writerow([str(remaining), str(reset)])
@@ -34,18 +37,21 @@ def _get_quota_in_cache_inner(search_name: str, index:int) -> str:
     if search_name not in DEFAULT_PATHS:
         raise NotImplementedError # TODO Implement
     path_new = str(DEFAULT_PATHS[search_name]) + '/quota_cache.csv'
-    with open(path_new, 'r') as csvfile:
-        file_reader = csv.reader(csvfile, delimiter=',')
-        output = list(file_reader)
-        if output == []:
-            raise ValueError('Cache is empty!')
-        
+    try:
+        with open(path_new, 'r') as csvfile:
+            file_reader = csv.reader(csvfile, delimiter=',')
+            output = list(file_reader)
+            if output == []:
+                raise ValueError('Cache is empty!')
+            
+            min_remaining = None
+            for row in output:
+                if min_remaining is None:
+                    min_remaining = row[index]
+                else:
+                    min_remaining = min(row[index], min_remaining)
+    except FileNotFoundError:
         min_remaining = None
-        for row in output:
-            if min_remaining is None:
-                min_remaining = row[index]
-            else:
-                min_remaining = min(row[index], min_remaining)
     if min_remaining is None:
         raise TypeError(f'{min_remaining} is None')
     return min_remaining
