@@ -1,7 +1,7 @@
 import csv
 import time
 from pybliometrics.scopus.utils.constants import DEFAULT_PATHS
-
+from datetime import datetime
 # Quote cache invariant - the reset time is the same throughout the file
 def store_quota_in_cache(results):
     def store_quota_in_cache_inner(search_name: str, remaining: float, reset: float):
@@ -10,8 +10,10 @@ def store_quota_in_cache(results):
         path_new = str(DEFAULT_PATHS[search_name]) + '/quota_cache.csv'
         with open(path_new, 'r', newline='') as csvfile:
             file_reader = csv.reader(csvfile, delimiter=',')
-            if list(file_reader) !=[]:
-                reset_time = list(file_reader)[0][1]
+            file_reader_list = list(file_reader)
+            if file_reader_list !=[]:
+                reset_time_str = file_reader_list[0][1]
+                reset_time = time.mktime(datetime.strptime(reset_time_str, "%Y-%m-%d %H:%M:%S").timetuple())
                 current_time = time.time()
                 if float(reset_time) < current_time:
                     csvfile.truncate(0)
