@@ -75,6 +75,9 @@ class AuthorName(BaseModel):
     tag: Literal['author'] = 'author'
     operator: StringPredicate
 
+class AuthorID(BaseModel):
+    tag: Literal['authorid'] = 'authorid'
+    operator: StringPredicate
 
 class Journal(BaseModel):
     tag: Literal['journal'] = 'journal'
@@ -118,6 +121,7 @@ class PaperSearchQuery(BaseModel):
         IdQuery,
         Title,
         AuthorName,
+        AuthorID,
         Journal,
         Abstract,
         Institution,
@@ -141,6 +145,7 @@ class AuthorSearchQuery(BaseModel):
         and_int,  # type: ignore[misc]
         or_int,  # type: ignore[misc]
         AuthorName,
+        AuthorID,
         Institution,
         #Topic
         ],

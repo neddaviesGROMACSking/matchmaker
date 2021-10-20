@@ -64,7 +64,7 @@ NativeData = TypeVar('NativeData')
 @dataclass
 class BaseNativeQuery(Generic[NativeData], AbstractNativeQuery):
     coroutine_function: Callable[[NewAsyncClient], Awaitable[NativeData]]
-    metadata: Dict[str, str]
+    metadata: Dict[str, int]
     def count_api_calls(self):
         return sum(self.metadata.values())
     def count_api_calls_by_method(self, method: str):
@@ -82,14 +82,15 @@ class BaseBackendQueryEngine(
         self.rate_limiter = rate_limiter
         super().__init__(*args, **kwargs)
     
-    def _query_to_awaitable(self, query: Query) -> Tuple[Callable[[NewAsyncClient], Awaitable[NativeData]], Dict[str, str]]:
+    async def _query_to_awaitable(self, query: Query, client: NewAsyncClient) -> Tuple[Callable[[NewAsyncClient], Awaitable[NativeData]], Dict[str, int]]:
         raise NotImplementedError('This method is required for query_to_native')
     async def _query_to_native(self, query: Query) -> BaseNativeQuery[NativeData]:
-        awaitable, metadata = self._query_to_awaitable(query)
+        connector = TCPConnector(force_close=True)
+        async with NewAsyncClient(connector = connector, rate_limiter = self.rate_limiter) as client:
+            awaitable, metadata = await self._query_to_awaitable(query, client)
         return BaseNativeQuery(awaitable, metadata)
 
     async def _run_native_query(self, query: BaseNativeQuery[NativeData]) -> NativeData:
-        print('here')
         connector = TCPConnector(force_close=True)
         async with NewAsyncClient(connector = connector, rate_limiter = self.rate_limiter) as client:
             results = await query.coroutine_function(client)

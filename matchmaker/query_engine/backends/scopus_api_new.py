@@ -1,10 +1,10 @@
 from pydantic import BaseModel, Field
 from typing import Optional, List, Any, Union, Literal, Annotated
-from matchmaker.query_engine.query_types import And, Or, Title,  Abstract, Keyword, Year, StringPredicate
+from matchmaker.query_engine.query_types import And, Or, Title,  Abstract, Keyword, Year, StringPredicate, AuthorID
 from pybliometrics.scopus import ScopusSearch, AffiliationSearch, AuthorSearch
 from matchmaker.query_engine.backends.scopus_quota_cache import store_quota_in_cache, get_remaining_in_cache
 from matchmaker.query_engine.backends.scopus_constants import Length, Allowance
-
+from aiohttp import ClientSession
 def query_to_term(query):
     def make_year_term(start_year: Optional[int] = None, end_year: Optional[int] = None):
         if start_year is None and end_year is None:
@@ -129,10 +129,6 @@ class Area(BaseModel):
     tag: Literal['area'] = 'area'
     operator: StringPredicate
 
-class AuthorID(BaseModel):
-    tag: Literal['authorid'] = 'authorid'
-    operator: StringPredicate
-
 class AffiliationID(BaseModel):
     tag: Literal['affiliationid'] = 'affiliationid'
     operator: StringPredicate
@@ -240,10 +236,10 @@ class AuthorLast(BaseModel):
     tag: Literal['authlast'] = 'authlast'
     operator: StringPredicate
 
-and_int = And['AuthorSearchQuery']
-or_int = Or['AuthorSearchQuery']
+and_int = And['ScopusAuthorSearchQuery']
+or_int = Or['ScopusAuthorSearchQuery']
 
-class AuthorSearchQuery(BaseModel):
+class ScopusAuthorSearchQuery(BaseModel):
     __root__: Annotated[ 
     Union[
         and_int, 
@@ -286,8 +282,9 @@ class AffiliationSearchQuery(BaseModel):
 and_int.update_forward_refs()
 or_int.update_forward_refs()
 
-def scopus_search_on_query(
+async def scopus_search_on_query(
     query: ScopusSearchQuery,
+    client: ClientSession,
     view: Union[Literal['COMPLETE'], Literal['STANDARD']] = 'COMPLETE'
 ) -> List[ScopusSearchResult]:
     term = query_to_term(query.dict()['__root__'])
@@ -302,8 +299,9 @@ def scopus_search_on_query(
         
     return new_results
 
-def get_scopus_query_no_requests(
+async def get_scopus_query_no_requests(
     query: ScopusSearchQuery,
+    client: ClientSession,
     view: Union[Literal['COMPLETE'], Literal['STANDARD']] = 'COMPLETE'
 ) -> int:
     term = query_to_term(query.dict()['__root__'])
@@ -314,14 +312,15 @@ def get_scopus_query_no_requests(
     else:
         return request_search.get_results_size()//Length.SCOPUS_STANDARD_LENGTH +2
 
-def get_scopus_query_remaining_in_cache() -> int:
+async def get_scopus_query_remaining_in_cache() -> int:
     try:
         return get_remaining_in_cache('ScopusSearch')
     except TypeError:
         return Allowance.SCOPUS_START_ALLOWANCE
 
-def author_search_on_query(
-    query: AuthorSearchQuery,
+async def author_search_on_query(
+    query: ScopusAuthorSearchQuery,
+    client: ClientSession,
 ) -> List[AuthorSearchResult]:
     term = query_to_term(query.dict()['__root__'])
     author_results = AuthorSearch(term)
@@ -334,22 +333,24 @@ def author_search_on_query(
             new_authors.append(AuthorSearchResult.parse_obj(dict_result))
     return new_authors
 
-def get_author_query_no_requests(
-    query: AuthorSearchQuery
+async def get_author_query_no_requests(
+    query: ScopusAuthorSearchQuery,
+    client: ClientSession,
 ) -> int:
     term = query_to_term(query.dict()['__root__'])
     request_search = AuthorSearch(term, download = False)
     store_quota_in_cache(request_search)
     return request_search.get_results_size()//Length.AUTHOR_LENGTH +2
 
-def get_author_query_remaining_in_cache() -> int:
+async def get_author_query_remaining_in_cache() -> int:
     try:
         return get_remaining_in_cache('AuthorSearch')
     except TypeError:
         return Allowance.AUTH_START_ALLOWANCE
 
-def affiliation_search_on_query(
+async def affiliation_search_on_query(
     query: AffiliationSearchQuery,
+    client: ClientSession,
 ) -> List[AffiliationSearchResult]:
     term = query_to_term(query.dict()['__root__'])
     affil_results = AffiliationSearch(term)
@@ -362,15 +363,16 @@ def affiliation_search_on_query(
             new_affiliations.append(AffiliationSearchResult.parse_obj(dict_result))
     return new_affiliations
 
-def get_affiliation_query_no_requests(
-    query: AffiliationSearchQuery
+async def get_affiliation_query_no_requests(
+    query: AffiliationSearchQuery,
+    client: ClientSession,
 ) -> int:
     term = query_to_term(query.dict()['__root__'])
     request_search = AffiliationSearch(term, download = False)
     store_quota_in_cache(request_search)
     return request_search.get_results_size()//Length.AFFIL_LENGTH +2
 
-def get_affiliation_query_remaining_in_cache() -> int:
+async def get_affiliation_query_remaining_in_cache() -> int:
     try:
         return get_remaining_in_cache('AffiliationSearch')
     except TypeError:

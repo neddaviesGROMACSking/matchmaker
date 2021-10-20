@@ -1,10 +1,10 @@
 from matchmaker.query_engine.backends.scopus_api_new import (
-    AuthorSearchQuery,
+    ScopusAuthorSearchQuery,
     author_search_on_query,
     get_author_query_no_requests,
     get_author_query_remaining_in_cache,
 )
-
+import asyncio
 d = {
     'tag': 'and',
     'fields_': [
@@ -25,15 +25,17 @@ d = {
     ]
 }
 
-pq = AuthorSearchQuery.parse_obj(d)
-cache_rem = get_author_query_remaining_in_cache()
-print(cache_rem)
-results_length = get_author_query_no_requests(pq)
-cache_rem = get_author_query_remaining_in_cache()
-print(cache_rem)
-results = author_search_on_query(pq)
-#print(len(results))
-print(results[0])
-print(results_length)
-cache_rem = get_author_query_remaining_in_cache()
-print(cache_rem)
+pq = ScopusAuthorSearchQuery.parse_obj(d)
+async def main():
+    cache_rem = get_author_query_remaining_in_cache()
+    print(cache_rem)
+    results_length = await get_author_query_no_requests(pq, None)
+    cache_rem = await get_author_query_remaining_in_cache()
+    print(cache_rem)
+    results = await author_search_on_query(pq, None)
+    #print(len(results))
+    print(results[0])
+    print(results_length)
+    cache_rem = await get_author_query_remaining_in_cache()
+    print(cache_rem)
+asyncio.run(main())

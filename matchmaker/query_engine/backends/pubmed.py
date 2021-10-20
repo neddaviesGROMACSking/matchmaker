@@ -132,7 +132,7 @@ class PaperSearchQueryEngine(
         self.api_key = api_key
         super().__init__(rate_limiter, *args, **kwargs)
 
-    def _query_to_awaitable(self, query: PaperSearchQuery) -> Tuple[
+    def _query_to_awaitable(self, query: PaperSearchQuery, client: NewAsyncClient) -> Tuple[
         Callable[
             [NewAsyncClient], 
             Awaitable[List[PubmedNativeData]]
@@ -148,135 +148,135 @@ class PaperSearchQueryEngine(
         pubmed_search_query = paper_query_to_esearch(query)
         
         async def make_coroutine(client: ClientSession) -> List[PubmedNativeData]:
-                async def esearch_on_query_set_future(id_list_future, query, client):
+            async def esearch_on_query_set_future(id_list_future, query, client):
 
-                    output = await esearch_on_query(query, client, api_key=self.api_key)
-                    id_list = output.pubmed_id_list
-                    id_list_future.set_result(id_list)
-                    return id_list_future
+                output = await esearch_on_query(query, client, api_key=self.api_key)
+                id_list = output.pubmed_id_list
+                id_list_future.set_result(id_list)
+                return id_list_future
+            
+            async def efetch_on_id_list_resolve_id(id_list_future, client):
+                await id_list_future
+                id_list = id_list_future.result()
+                result = await efetch_on_id_list(PubmedEFetchQuery(pubmed_id_list = id_list), client, api_key=self.api_key)
+                return result
+
+            async def efetch_on_elink_resolve_id(id_list_future, fetch_list_future, linkname, client):
+                def id_mapper_to_unique_list(id_mapper):
+                    unique_ids = []
+                    for start_id, linked_ids in id_mapper.items():
+                        if linked_ids is not None:
+                            for linked_id in linked_ids:
+                                if linked_id not in unique_ids:
+                                    unique_ids.append(linked_id)
+                    return unique_ids
                 
-                async def efetch_on_id_list_resolve_id(id_list_future, client):
-                    await id_list_future
-                    id_list = id_list_future.result()
-                    result = await efetch_on_id_list(PubmedEFetchQuery(pubmed_id_list = id_list), client, api_key=self.api_key)
-                    return result
+                await id_list_future
+                id_list = id_list_future.result()
 
-                async def efetch_on_elink_resolve_id(id_list_future, fetch_list_future, linkname, client):
-                    def id_mapper_to_unique_list(id_mapper):
-                        unique_ids = []
-                        for start_id, linked_ids in id_mapper.items():
-                            if linked_ids is not None:
-                                for linked_id in linked_ids:
-                                    if linked_id not in unique_ids:
-                                        unique_ids.append(linked_id)
-                        return unique_ids
-                    
-                    await id_list_future
-                    id_list = id_list_future.result()
-
-                    output = await elink_on_id_list(PubmedELinkQuery(pubmed_id_list = id_list, linkname = linkname), client, api_key=self.api_key)
-                    
-                    id_mapper = output.id_mapper
-                    unique_fetch_list = id_mapper_to_unique_list(id_mapper)
-                    fetch_list_future.set_result(unique_fetch_list)
-                    return id_mapper
-
-                async def redistribute_fetches(*list_futures, bin_futures = None, split_factor = None):
-                    if bin_futures is None:
-                        raise ValueError( 'No bin_futures')
-                    if split_factor is None:
-                        raise ValueError('No split factor')
-                    
-                    total_fetch_list = []
-                    for i in list_futures:
-                        await i
-                        fetch_list = i.result()
-                        total_fetch_list += fetch_list
-                    unique_total_fetch_list = list(set(total_fetch_list))
-                    fetch_length = len(unique_total_fetch_list)
-                    bin_size = fetch_length // split_factor
-                    bins = []
-                    for i in range(split_factor):
-                        if i == split_factor -1:
-                            bins.append(unique_total_fetch_list[bin_size*i:len(unique_total_fetch_list)])
-                        else:
-                            bins.append(unique_total_fetch_list[bin_size*i:bin_size*(i+1)])
-
-                    for counter, j in enumerate(bin_futures):
-                        bin_item = bins[counter]
-                        j.set_result(bin_item)
+                output = await elink_on_id_list(PubmedELinkQuery(pubmed_id_list = id_list, linkname = linkname), client, api_key=self.api_key)
                 
-                async def get_papers_from_index(id_mapper, sub_paper_index):
-                    id_mapper_papers = {}
-                    for search_id, id_list in id_mapper.items():
-                        if id_list is not None:
-                            id_mapper_papers[search_id] = [sub_paper_index[sub_id] for sub_id in id_list]
-                        else:
-                            id_mapper_papers[search_id] = []
-                    return id_mapper_papers
+                id_mapper = output.id_mapper
+                unique_fetch_list = id_mapper_to_unique_list(id_mapper)
+                fetch_list_future.set_result(unique_fetch_list)
+                return id_mapper
+
+            async def redistribute_fetches(*list_futures, bin_futures = None, split_factor = None):
+                if bin_futures is None:
+                    raise ValueError( 'No bin_futures')
+                if split_factor is None:
+                    raise ValueError('No split factor')
                 
-                original_fetch_ids_future = get_running_loop().create_future()
-                ref_fetch_list_future = get_running_loop().create_future()
-                cited_fetch_list_future = get_running_loop().create_future()
+                total_fetch_list = []
+                for i in list_futures:
+                    await i
+                    fetch_list = i.result()
+                    total_fetch_list += fetch_list
+                unique_total_fetch_list = list(set(total_fetch_list))
+                fetch_length = len(unique_total_fetch_list)
+                bin_size = fetch_length // split_factor
+                bins = []
+                for i in range(split_factor):
+                    if i == split_factor -1:
+                        bins.append(unique_total_fetch_list[bin_size*i:len(unique_total_fetch_list)])
+                    else:
+                        bins.append(unique_total_fetch_list[bin_size*i:bin_size*(i+1)])
 
-                bin_futures = []
-                for j in range(split_factor):
-                    bin_futures.append(get_running_loop().create_future())
-                
-                awaitables = []
+                for counter, j in enumerate(bin_futures):
+                    bin_item = bins[counter]
+                    j.set_result(bin_item)
+            
+            async def get_papers_from_index(id_mapper, sub_paper_index):
+                id_mapper_papers = {}
+                for search_id, id_list in id_mapper.items():
+                    if id_list is not None:
+                        id_mapper_papers[search_id] = [sub_paper_index[sub_id] for sub_id in id_list]
+                    else:
+                        id_mapper_papers[search_id] = []
+                return id_mapper_papers
+            
+            original_fetch_ids_future = get_running_loop().create_future()
+            ref_fetch_list_future = get_running_loop().create_future()
+            cited_fetch_list_future = get_running_loop().create_future()
 
-                esearch_await = esearch_on_query_set_future(original_fetch_ids_future, pubmed_search_query, client)
-                efetch_await = efetch_on_id_list_resolve_id(original_fetch_ids_future, client)
+            bin_futures = []
+            for j in range(split_factor):
+                bin_futures.append(get_running_loop().create_future())
+            
+            awaitables = []
 
-                references_set_await = efetch_on_elink_resolve_id(
-                    original_fetch_ids_future,
-                    ref_fetch_list_future,
-                    'pubmed_pubmed_refs', 
-                    client
-                )
-                cited_by_set_await = efetch_on_elink_resolve_id(
-                    original_fetch_ids_future, 
-                    cited_fetch_list_future, 
-                    'pubmed_pubmed_citedin', 
-                    client
-                )
+            esearch_await = esearch_on_query_set_future(original_fetch_ids_future, pubmed_search_query, client)
+            efetch_await = efetch_on_id_list_resolve_id(original_fetch_ids_future, client)
 
-                redistribute_await = redistribute_fetches(
-                    ref_fetch_list_future, 
-                    cited_fetch_list_future, 
-                    bin_futures = bin_futures,
-                    split_factor=split_factor
-                )
-                awaitables += [esearch_await, efetch_await, references_set_await, cited_by_set_await, redistribute_await]
-                for i in bin_futures:
-                    awaitables.append(efetch_on_id_list_resolve_id(i,client))
+            references_set_await = efetch_on_elink_resolve_id(
+                original_fetch_ids_future,
+                ref_fetch_list_future,
+                'pubmed_pubmed_refs', 
+                client
+            )
+            cited_by_set_await = efetch_on_elink_resolve_id(
+                original_fetch_ids_future, 
+                cited_fetch_list_future, 
+                'pubmed_pubmed_citedin', 
+                client
+            )
 
-                gather_output = await gather(
-                    *awaitables
-                )
-                listed_gather_out = list(gather_output)
-                esearch_out, papers, references_mapper, cited_by_mapper, redist_out = listed_gather_out[0:5]
-                sub_papers = listed_gather_out[5: len(listed_gather_out)]
-                new_sub_papers = []
-                for i in sub_papers:
-                    new_sub_papers += i
-                
-                sub_paper_index = {i.paper_id.pubmed: i for i in new_sub_papers}
-                references_set, cited_by_set = await gather(
-                    get_papers_from_index(references_mapper, sub_paper_index),
-                    get_papers_from_index(cited_by_mapper, sub_paper_index)
-                )
-                native_papers = []
-                for paper in papers:
-                    pubmed_id = paper.paper_id.pubmed
-                    native_paper = PubmedNativeData.parse_obj({
-                        **paper.dict(),
-                        'references': references_set[pubmed_id],
-                        'cited_by': cited_by_set[pubmed_id]
-                    })
-                    native_papers.append(native_paper)
+            redistribute_await = redistribute_fetches(
+                ref_fetch_list_future, 
+                cited_fetch_list_future, 
+                bin_futures = bin_futures,
+                split_factor=split_factor
+            )
+            awaitables += [esearch_await, efetch_await, references_set_await, cited_by_set_await, redistribute_await]
+            for i in bin_futures:
+                awaitables.append(efetch_on_id_list_resolve_id(i,client))
 
-                return native_papers
+            gather_output = await gather(
+                *awaitables
+            )
+            listed_gather_out = list(gather_output)
+            esearch_out, papers, references_mapper, cited_by_mapper, redist_out = listed_gather_out[0:5]
+            sub_papers = listed_gather_out[5: len(listed_gather_out)]
+            new_sub_papers = []
+            for i in sub_papers:
+                new_sub_papers += i
+            
+            sub_paper_index = {i.paper_id.pubmed: i for i in new_sub_papers}
+            references_set, cited_by_set = await gather(
+                get_papers_from_index(references_mapper, sub_paper_index),
+                get_papers_from_index(cited_by_mapper, sub_paper_index)
+            )
+            native_papers = []
+            for paper in papers:
+                pubmed_id = paper.paper_id.pubmed
+                native_paper = PubmedNativeData.parse_obj({
+                    **paper.dict(),
+                    'references': references_set[pubmed_id],
+                    'cited_by': cited_by_set[pubmed_id]
+                })
+                native_papers.append(native_paper)
+
+            return native_papers
 
         return make_coroutine, metadata
 
