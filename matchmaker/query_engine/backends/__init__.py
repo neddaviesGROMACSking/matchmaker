@@ -87,7 +87,8 @@ class BaseBackendQueryEngine(
     async def _query_to_native(self, query: Query) -> BaseNativeQuery[NativeData]:
         connector = TCPConnector(force_close=True)
         async with NewAsyncClient(connector = connector, rate_limiter = self.rate_limiter) as client:
-            awaitable, metadata = await self._query_to_awaitable(query, client)
+            coro = self._query_to_awaitable(query,  client)
+            awaitable, metadata = await coro
         return BaseNativeQuery(awaitable, metadata)
 
     async def _run_native_query(self, query: BaseNativeQuery[NativeData]) -> NativeData:
@@ -104,6 +105,7 @@ class BaseBackendQueryEngine(
     async def __call__(self, query: Query) -> Data:
         nd = await self._run_native_query(await self._query_to_native(query))
         return await self._data_from_processed(await self._post_process(query, nd))
+    
     #Put post process as no op
 
 

@@ -1,30 +1,51 @@
-from pydantic import BaseModel, Field
-
-from matchmaker.query_engine.query_types import PaperSearchQuery, \
-        AuthorSearchQuery
-from matchmaker.query_engine.data_types import PaperData, AuthorData
-from matchmaker.query_engine.backend import Backend
-from matchmaker.query_engine.backends import BasePaperSearchQueryEngine, BaseAuthorSearchQueryEngine, BaseBackendQueryEngine, NewAsyncClient, RateLimiter
-from matchmaker.query_engine.backends.pubmed_api import (
-    PubmedESearchQuery, 
-    MeshTopic, 
-    PubmedEFetchQuery, 
-    PubmedEFetchData,
-    PubmedELinkQuery,
-    PubmedAuthor, 
-    elink_on_id_list, 
-    efetch_on_id_list, 
-    esearch_on_query,
-    PubmedIndividual
-)
-from matchmaker.query_engine.backends.pubmed_processsors import process_institution, ProcessedEFetchData, ProcessedAuthor, ProcessedData, ProcessedIndividual
-from matchmaker.query_engine.query_types import And, Or, Title, AuthorName, Journal, Abstract, Institution, Keyword, Year, StringPredicate
-from typing import Annotated, Callable, Awaitable, Tuple, Dict, List, Union
+from asyncio import gather, get_running_loop
+from copy import copy
 from pprint import pprint
-from asyncio import get_running_loop, gather
+from typing import Annotated, Awaitable, Callable, Dict, List, Tuple, Union
 
 from aiohttp import ClientSession
-from copy import copy
+from matchmaker.query_engine.backend import Backend
+from matchmaker.query_engine.backends import (
+    BaseAuthorSearchQueryEngine,
+    BaseBackendQueryEngine,
+    BasePaperSearchQueryEngine,
+    NewAsyncClient,
+    RateLimiter,
+)
+from matchmaker.query_engine.backends.pubmed_api import (
+    MeshTopic,
+    PubmedAuthor,
+    PubmedEFetchData,
+    PubmedEFetchQuery,
+    PubmedELinkQuery,
+    PubmedESearchQuery,
+    PubmedIndividual,
+    efetch_on_id_list,
+    elink_on_id_list,
+    esearch_on_query,
+)
+from matchmaker.query_engine.backends.pubmed_processsors import (
+    ProcessedAuthor,
+    ProcessedData,
+    ProcessedEFetchData,
+    ProcessedIndividual,
+    process_institution,
+)
+from matchmaker.query_engine.data_types import AuthorData, PaperData
+from matchmaker.query_engine.query_types import AuthorSearchQuery, PaperSearchQuery
+from matchmaker.query_engine.query_types import (
+    Abstract,
+    And,
+    AuthorName,
+    Institution,
+    Journal,
+    Keyword,
+    Or,
+    StringPredicate,
+    Title,
+    Year,
+)
+from pydantic import BaseModel, Field
 
 
 # TODO Use generators to pass information threough all levels
@@ -132,7 +153,7 @@ class PaperSearchQueryEngine(
         self.api_key = api_key
         super().__init__(rate_limiter, *args, **kwargs)
 
-    def _query_to_awaitable(self, query: PaperSearchQuery, client: NewAsyncClient) -> Tuple[
+    async def _query_to_awaitable(self, query: PaperSearchQuery, client: NewAsyncClient) -> Tuple[
         Callable[
             [NewAsyncClient], 
             Awaitable[List[PubmedNativeData]]
@@ -383,7 +404,7 @@ class AuthorSearchQueryEngine(
         self.api_key = api_key
         super().__init__(rate_limiter, *args, **kwargs)
 
-    def _query_to_awaitable(self, query: AuthorSearchQuery) -> Tuple[
+    async def _query_to_awaitable(self, query: AuthorSearchQuery, client: NewAsyncClient) -> Tuple[
         Callable[
             [NewAsyncClient], 
             Awaitable[List[PubmedNativeData]]
