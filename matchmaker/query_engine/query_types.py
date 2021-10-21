@@ -93,6 +93,9 @@ class Institution(BaseModel):
     tag: Literal['institution'] = 'institution'
     operator: StringPredicate
 
+class InstitutionID(BaseModel):
+    tag: Literal['institutionid'] = 'institutionid'
+    operator: StringPredicate
 
 class Keyword(BaseModel):
     tag: Literal['keyword'] = 'keyword'
@@ -108,16 +111,14 @@ class Topic(BaseModel):
     operator: StringPredicate
 
 
-# mypy currently can't handle recursive types:
-# https://github.com/python/mypy/issues/731
 and_int = And['PaperSearchQuery']
 or_int = Or['PaperSearchQuery']
 
 class PaperSearchQuery(BaseModel):
-    __root__: Annotated[  # type: ignore[misc]
+    __root__: Annotated[
     Union[
-        and_int,  # type: ignore[misc]
-        or_int,  # type: ignore[misc]
+        and_int,
+        or_int,
         IdQuery,
         Title,
         AuthorName,
@@ -140,18 +141,29 @@ and_int = And['PaperSearchQuery']
 or_int = Or['PaperSearchQuery']
 
 class AuthorSearchQuery(BaseModel):
-    __root__: Annotated[  # type: ignore[misc]
+    __root__: Annotated[  
     Union[
-        and_int,  # type: ignore[misc]
-        or_int,  # type: ignore[misc]
+        and_int,  
+        or_int,  
         AuthorName,
         AuthorID,
         Institution,
+        InstitutionID,
         #Topic
-        ],
+    ],
     Field(discriminator='tag')]
 
 
 and_int.update_forward_refs()
 or_int.update_forward_refs()
 AuthorSearchQuery.update_forward_refs()
+
+class InstitutionSearchQuery(BaseModel):
+    __root__: Annotated[
+    Union[
+        and_int,  
+        or_int,
+        Institution,
+        InstitutionID
+    ],
+    Field(discriminator='tag')]

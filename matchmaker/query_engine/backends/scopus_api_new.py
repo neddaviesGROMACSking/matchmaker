@@ -288,7 +288,7 @@ async def scopus_search_on_query(
     view: Union[Literal['COMPLETE'], Literal['STANDARD']] = 'COMPLETE'
 ) -> List[ScopusSearchResult]:
     term = query_to_term(query.dict()['__root__'])
-    scopus_results = ScopusSearch(term, view = view)
+    scopus_results = ScopusSearch(term, view = view, verbose = True)
     store_quota_in_cache(scopus_results)
     paper_results = scopus_results.results
     new_results =[]
@@ -323,7 +323,7 @@ async def author_search_on_query(
     client: ClientSession,
 ) -> List[AuthorSearchResult]:
     term = query_to_term(query.dict()['__root__'])
-    author_results = AuthorSearch(term)
+    author_results = AuthorSearch(term, verbose = True)
     store_quota_in_cache(author_results)
     authors = author_results.authors
     new_authors =[]
@@ -353,7 +353,7 @@ async def affiliation_search_on_query(
     client: ClientSession,
 ) -> List[AffiliationSearchResult]:
     term = query_to_term(query.dict()['__root__'])
-    affil_results = AffiliationSearch(term)
+    affil_results = AffiliationSearch(term, verbose = True)
     store_quota_in_cache(affil_results)
     affiliations = affil_results.affiliations
     new_affiliations =[]

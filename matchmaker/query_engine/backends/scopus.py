@@ -3,14 +3,17 @@ from typing import List, Tuple, Callable, Awaitable, Dict
 from matchmaker.query_engine.backends import (
     BaseAuthorSearchQueryEngine,
     BasePaperSearchQueryEngine,
+    BaseInstitutionSearchQueryEngine,
     RateLimiter,
     NewAsyncClient
 )
 from matchmaker.query_engine.backends.scopus_api_new import (
-    AffiliationSearchQuery,
-    ScopusAuthorSearchQuery,
     ScopusSearchQuery,
     ScopusSearchResult,
+    ScopusAuthorSearchQuery,
+    AuthorSearchResult,
+    AffiliationSearchQuery,
+    AffiliationSearchResult,
     affiliation_search_on_query,
     author_search_on_query,
     get_affiliation_query_no_requests,
@@ -22,9 +25,9 @@ from matchmaker.query_engine.backends.scopus_api_new import (
     scopus_search_on_query,
 )
 from matchmaker.query_engine.backends.scopus_utils import create_config
-from matchmaker.query_engine.query_types import AuthorSearchQuery, PaperSearchQuery
+from matchmaker.query_engine.query_types import AuthorSearchQuery, PaperSearchQuery, InstitutionSearchQuery
 from aiohttp import ClientSession
-from matchmaker.query_engine.data_types import AuthorData, PaperData
+from matchmaker.query_engine.data_types import AuthorData, PaperData, InstitutionData
 from matchmaker.query_engine.backends.tools import replace_dict_tags, replace_dict_tag
 from matchmaker.query_engine.backends.scopus_processors import ProcessedScopusSearchResult
 from pprint import pprint
@@ -32,7 +35,7 @@ from html import unescape
 class NotEnoughRequests(Exception):
     pass
 
-def paper_query_to_scopus(query: PaperSearchQuery):
+def paper_query_to_scopus(query: PaperSearchQuery) -> ScopusSearchQuery:
     query_dict = query.dict()['__root__']
     new_query_dict = replace_dict_tags(
         query_dict,
@@ -44,9 +47,17 @@ def paper_query_to_scopus(query: PaperSearchQuery):
     )
     return ScopusSearchQuery.parse_obj(new_query_dict)
 
-def author_query_to_scopus_author(query: AuthorSearchQuery):
+def author_query_to_scopus_author(query: AuthorSearchQuery) -> ScopusAuthorSearchQuery:
     return ScopusAuthorSearchQuery.parse_obj(query.dict()['__root__'])
 
+def institution_query_to_affiliation(query: InstitutionSearchQuery) -> AffiliationSearchQuery:
+    query_dict = query.dict()['__root__']
+    new_query_dict = replace_dict_tags(
+        query_dict,
+        affiliation = 'institution',
+        affiliationid = 'institutionid'
+    )
+    return AffiliationSearchQuery.parse_obj(new_query_dict) 
 
 class PaperSearchQueryEngine(
         BasePaperSearchQueryEngine[List[ScopusSearchResult], List[ProcessedScopusSearchResult]]):
@@ -54,7 +65,11 @@ class PaperSearchQueryEngine(
         create_config(api_key, institution_token)
         super().__init__(rate_limiter, *args, **kwargs)
     
-    async def _query_to_awaitable(self, query: PaperSearchQuery, client: NewAsyncClient) -> Tuple[Callable[[NewAsyncClient], Awaitable[List[ScopusSearchResult]]], Dict[str, int]]:
+    async def _query_to_awaitable(
+        self, 
+        query: PaperSearchQuery, 
+        client: NewAsyncClient
+    ) -> Tuple[Callable[[NewAsyncClient], Awaitable[List[ScopusSearchResult]]], Dict[str, int]]:
         scopus_search_query = paper_query_to_scopus(query)
         cache_remaining = await get_scopus_query_remaining_in_cache()
         view = 'COMPLETE'
@@ -68,7 +83,7 @@ class PaperSearchQueryEngine(
         metadata = {
             'scopus_search': no_requests,
         }
-        async def make_coroutine(client: ClientSession) -> List[ScopusSearchResult]:
+        async def make_coroutine(client: NewAsyncClient) -> List[ScopusSearchResult]:
             return await scopus_search_on_query(scopus_search_query, client, view)
         return make_coroutine, metadata
     
@@ -209,12 +224,72 @@ class PaperSearchQueryEngine(
             else:
                 new_institutions = None
             new_paper_dict['institutions'] = new_institutions
-
-
             new_paper_dict['keywords'] = paper_dict['authkeywords']
             new_paper_dict['cited_by'] = paper_dict['citedby_count']
-            #print(new_paper_dict['other_institutions'])
             new_papers.append(PaperData.parse_obj(new_paper_dict))
-            pprint(new_papers[i].dict())
         return new_papers
 
+"""
+class AuthorSearchQueryEngine(
+    BasePaperSearchQueryEngine[List[AuthorSearchResult], List[AuthorSearchResult]]
+):
+    def __init__(self, api_key:str , institution_token: str, rate_limiter: RateLimiter = RateLimiter(), *args, **kwargs):
+        create_config(api_key, institution_token)
+        super().__init__(rate_limiter, *args, **kwargs)
+    
+    async def _query_to_awaitable(
+        self, 
+        query: AuthorSearchQuery, 
+        client: NewAsyncClient
+    ) -> Tuple[Callable[[NewAsyncClient], Awaitable[List[ScopusAuthorSearchResult]]], Dict[str, int]]:
+"""
+
+class InstitutionSearchQueryEngine(
+    BaseInstitutionSearchQueryEngine[List[AffiliationSearchResult], List[AffiliationSearchResult]]
+):
+    def __init__(self, api_key:str , institution_token: str, rate_limiter: RateLimiter = RateLimiter(), *args, **kwargs):
+        create_config(api_key, institution_token)
+        super().__init__(rate_limiter, *args, **kwargs)
+    
+    async def _query_to_awaitable(
+        self, 
+        query: InstitutionSearchQuery, 
+        client: NewAsyncClient
+    ) -> Tuple[Callable[[NewAsyncClient], Awaitable[List[AffiliationSearchResult]]], Dict[str, int]]:
+        affiliation_search_query = institution_query_to_affiliation(query)
+        cache_remaining = await get_affiliation_query_remaining_in_cache()
+        if cache_remaining > 1:
+            no_requests = await get_affiliation_query_no_requests(affiliation_search_query, client)
+        else:
+            raise NotEnoughRequests()
+        cache_remaining = await get_affiliation_query_remaining_in_cache()
+        if no_requests > cache_remaining:
+            raise NotEnoughRequests()
+        metadata = {
+            'affiliation_search': no_requests,
+        }
+        async def make_coroutine(client: NewAsyncClient) -> List[AffiliationSearchResult]:
+            return await affiliation_search_on_query(affiliation_search_query, client)
+        return make_coroutine, metadata
+    
+    async def _post_process(self, query: PaperSearchQuery, data: List[AffiliationSearchResult]) -> List[InstitutionData]:
+        new_papers = []
+        for paper in data:
+            paper_dict = paper.dict()
+            new_paper_dict = {}
+            new_paper_dict['id'] = paper_dict['eid'].split('-')[-1]
+            new_paper_dict['name'] = paper_dict['name']
+            new_paper_dict['name_variants'] = [paper_dict['variant']]
+            new_paper_dict['doc_count'] = paper_dict['documents']
+            processed = []
+            processed.append((paper_dict['name'], 'house'))
+            if paper_dict['city'] is not None:
+                processed.append((paper_dict['city'], 'city'))
+            if paper_dict['country'] is not None:
+                processed.append((paper_dict['country'], 'country'))
+            new_paper = InstitutionData.parse_obj(new_paper_dict)
+            new_papers.append(new_paper)
+        return new_papers
+    
+    async def _data_from_processed(self, data: List[InstitutionData]) -> List[InstitutionData]:
+        return data
