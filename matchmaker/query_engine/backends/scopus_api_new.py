@@ -180,7 +180,7 @@ or_int.update_forward_refs()
 
 
 class ScopusSearchResult(BaseModel):
-    eid:Optional[str]
+    eid: str
     doi: Optional[str]
     pii: Optional[str]
     pubmed_id: Optional[str]
