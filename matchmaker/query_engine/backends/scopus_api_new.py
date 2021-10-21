@@ -216,7 +216,7 @@ class ScopusSearchResult(BaseModel):
     fund_sponsor: Optional[str]
 
 
-class AuthorSearchResult(BaseModel):
+class ScopusAuthorSearchResult(BaseModel):
     eid: str
     surname: Optional[str]
     initials: Optional[str]
@@ -321,7 +321,7 @@ async def get_scopus_query_remaining_in_cache() -> int:
 async def author_search_on_query(
     query: ScopusAuthorSearchQuery,
     client: ClientSession,
-) -> List[AuthorSearchResult]:
+) -> List[ScopusAuthorSearchResult]:
     term = query_to_term(query.dict()['__root__'])
     author_results = AuthorSearch(term, verbose = True)
     store_quota_in_cache(author_results)
@@ -330,7 +330,7 @@ async def author_search_on_query(
     if authors is not None:
         for author in authors:
             dict_result = author._asdict()
-            new_authors.append(AuthorSearchResult.parse_obj(dict_result))
+            new_authors.append(ScopusAuthorSearchResult.parse_obj(dict_result))
     return new_authors
 
 async def get_author_query_no_requests(

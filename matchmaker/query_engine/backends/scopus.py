@@ -11,7 +11,7 @@ from matchmaker.query_engine.backends.scopus_api_new import (
     ScopusSearchQuery,
     ScopusSearchResult,
     ScopusAuthorSearchQuery,
-    AuthorSearchResult,
+    ScopusAuthorSearchResult,
     AffiliationSearchQuery,
     AffiliationSearchResult,
     affiliation_search_on_query,
@@ -48,7 +48,14 @@ def paper_query_to_scopus(query: PaperSearchQuery) -> ScopusSearchQuery:
     return ScopusSearchQuery.parse_obj(new_query_dict)
 
 def author_query_to_scopus_author(query: AuthorSearchQuery) -> ScopusAuthorSearchQuery:
-    return ScopusAuthorSearchQuery.parse_obj(query.dict()['__root__'])
+    query_dict = query.dict()['__root__']
+    # TODO Convert author name to first/last name
+    new_query_dict = replace_dict_tags(
+        query_dict,
+        affiliation = 'institution',
+        affiliationid = 'institutionid'
+    )
+    return ScopusAuthorSearchQuery.parse_obj(new_query_dict)
 
 def institution_query_to_affiliation(query: InstitutionSearchQuery) -> AffiliationSearchQuery:
     query_dict = query.dict()['__root__']
@@ -229,9 +236,9 @@ class PaperSearchQueryEngine(
             new_papers.append(PaperData.parse_obj(new_paper_dict))
         return new_papers
 
-"""
+
 class AuthorSearchQueryEngine(
-    BasePaperSearchQueryEngine[List[AuthorSearchResult], List[AuthorSearchResult]]
+    BaseAuthorSearchQueryEngine[List[ScopusAuthorSearchResult], List[AuthorData]]
 ):
     def __init__(self, api_key:str , institution_token: str, rate_limiter: RateLimiter = RateLimiter(), *args, **kwargs):
         create_config(api_key, institution_token)
@@ -242,10 +249,74 @@ class AuthorSearchQueryEngine(
         query: AuthorSearchQuery, 
         client: NewAsyncClient
     ) -> Tuple[Callable[[NewAsyncClient], Awaitable[List[ScopusAuthorSearchResult]]], Dict[str, int]]:
-"""
+        author_search_query = author_query_to_scopus_author(query)
+        cache_remaining = await get_author_query_remaining_in_cache()
+        if cache_remaining > 1:
+            no_requests = await get_author_query_no_requests(author_search_query, client)
+        else:
+            raise NotEnoughRequests()
+        cache_remaining = await get_author_query_remaining_in_cache()
+        if no_requests > cache_remaining:
+            raise NotEnoughRequests()
+        metadata = {
+            'author_search': no_requests,
+        }
+        async def make_coroutine(client: NewAsyncClient) -> List[ScopusAuthorSearchResult]:
+            return await author_search_on_query(author_search_query, client)
+        return make_coroutine, metadata
+    
+    async def _post_process(self, query: PaperSearchQuery, data: List[ScopusAuthorSearchResult]) -> List[AuthorData]:
+        new_papers = []
+        for paper in data:
+            paper_dict = paper.dict()
+            new_paper_dict = {}
+            new_paper_dict['id'] = paper_dict['eid'].split('-')[-1]
+            preferred_name = {
+                'surname': paper_dict['surname'],
+                'initials': paper_dict['initials'],
+                'givennames': paper_dict['givenname'],
+            }
+            new_paper_dict['preferred_name'] = preferred_name
+            paper_count = paper_dict['documents']
+            new_paper_dict['paper_count'] = int(paper_count)
+
+            if paper_dict['areas'] != ' ()':
+                subject_list = paper_dict['areas'].split('; ')
+                subjects = []
+                for i in subject_list:
+                    subject = i[0:4]
+                    doc_count = i[6:-1]
+                    subjects.append({
+                        'name': subject,
+                        'paper_count': doc_count
+                    })
+            else:
+                subjects = []
+            new_paper_dict['subjects'] = subjects
+            
+            processed = []
+            if paper_dict['city'] is not None:
+                processed.append((paper_dict['city'], 'city'))
+            if paper_dict['country'] is not None:
+                processed.append((paper_dict['country'], 'country'))
+            new_institution = {
+                'name': paper_dict['affiliation'],
+                'id': paper_dict['affiliation_id'],
+                'processed': processed
+            }
+            new_paper_dict['institution_current'] = new_institution
+            new_papers.append(AuthorData.parse_obj(new_paper_dict))
+        return new_papers
+
+
+    async def _data_from_processed(self, data: List[AuthorData]) -> List[AuthorData]:
+        return data
+
+
+
 
 class InstitutionSearchQueryEngine(
-    BaseInstitutionSearchQueryEngine[List[AffiliationSearchResult], List[AffiliationSearchResult]]
+    BaseInstitutionSearchQueryEngine[List[AffiliationSearchResult], List[InstitutionData]]
 ):
     def __init__(self, api_key:str , institution_token: str, rate_limiter: RateLimiter = RateLimiter(), *args, **kwargs):
         create_config(api_key, institution_token)
@@ -280,7 +351,7 @@ class InstitutionSearchQueryEngine(
             new_paper_dict['id'] = paper_dict['eid'].split('-')[-1]
             new_paper_dict['name'] = paper_dict['name']
             new_paper_dict['name_variants'] = [paper_dict['variant']]
-            new_paper_dict['doc_count'] = paper_dict['documents']
+            new_paper_dict['paper_count'] = paper_dict['documents']
             processed = []
             processed.append((paper_dict['name'], 'house'))
             if paper_dict['city'] is not None:

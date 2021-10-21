@@ -6,7 +6,7 @@ class InstitutionData(BaseModel):
     name: Optional[str] = None
     id: Optional[str] = None
     processed: Optional[List[Tuple[str, str]]] = None
-    doc_count: Optional[int] = None
+    paper_count: Optional[int] = None
     name_variants: Optional[List[str]] = None
 
 class AuthorData(BaseModel):
@@ -18,7 +18,7 @@ class AuthorData(BaseModel):
         name: str
         paper_count: int
     preferred_name: Name
-    author_id: Optional[str] = None
+    id: Optional[str] = None
     name_variants: List[Name] = []
     subjects: List[Subject] = []
     institution_current: Optional[InstitutionData] = None
