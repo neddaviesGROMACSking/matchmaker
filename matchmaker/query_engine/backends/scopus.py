@@ -28,7 +28,7 @@ from matchmaker.query_engine.backends.scopus_utils import create_config
 from matchmaker.query_engine.query_types import AuthorSearchQuery, PaperSearchQuery, InstitutionSearchQuery
 from aiohttp import ClientSession
 from matchmaker.query_engine.data_types import AuthorData, PaperData, InstitutionData
-from matchmaker.query_engine.backends.tools import replace_dict_tags, replace_dict_tag
+from matchmaker.query_engine.backends.tools import replace_dict_tags, execute_callback_on_tag
 from matchmaker.query_engine.backends.scopus_processors import ProcessedScopusSearchResult
 from pprint import pprint
 from html import unescape
@@ -48,13 +48,50 @@ def paper_query_to_scopus(query: PaperSearchQuery) -> ScopusSearchQuery:
     return ScopusSearchQuery.parse_obj(new_query_dict)
 
 def author_query_to_scopus_author(query: AuthorSearchQuery) -> ScopusAuthorSearchQuery:
+    def convert_author(dict_structure):
+        operator = dict_structure['operator']
+        tag = operator['tag']
+        author = operator['value']
+        names = author.split(' ')
+        firsts = ' '.join(names[0:-1])
+        last = names[-1]
+        if firsts == '':
+            new_dict_structure = {
+                'tag': 'authlast',
+                'operator': operator
+            }
+        else:
+            new_dict_structure = {
+                'tag': 'and',
+                'fields_': [
+                    {
+                        'tag': 'authfirst',
+                        'operator': {
+                            'tag': tag,
+                            'value': firsts
+                        }
+                    },
+                    {
+                        'tag': 'authlast',
+                        'operator': {
+                            'tag': tag,
+                            'value': last
+                        },
+                    }
+                ]
+            }
+
+        return new_dict_structure
+    
     query_dict = query.dict()['__root__']
-    # TODO Convert author name to first/last name
     new_query_dict = replace_dict_tags(
         query_dict,
         affiliation = 'institution',
         affiliationid = 'institutionid'
     )
+
+    new_query_dict = execute_callback_on_tag(new_query_dict, 'author', convert_author)
+
     return ScopusAuthorSearchQuery.parse_obj(new_query_dict)
 
 def institution_query_to_affiliation(query: InstitutionSearchQuery) -> AffiliationSearchQuery:

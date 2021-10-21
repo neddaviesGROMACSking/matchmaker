@@ -5,14 +5,26 @@ import asyncio
 
 import time
 from secret import scopus_api_key, scopus_inst_token
-d = {
-    'tag': 'institutionid',
-    'operator': {
-        'tag': 'equal',
-        'value': '60088958'
-    }
-}
 
+d = {
+    'tag': 'or',
+    'fields_': [
+        {
+            'tag': 'author',
+            'operator': {
+                'tag': 'equal',
+                'value': 'Jeremy Green'
+            }
+        },
+        {
+            'tag': 'author',
+            'operator': {
+                'tag': 'equal',
+                'value': 'Ian Rowlands'
+            }
+        }
+    ]
+}
 rate_limiter = RateLimiter()
 
 pub_searcher = AuthorSearchQueryEngine(scopus_api_key,scopus_inst_token, rate_limiter)
