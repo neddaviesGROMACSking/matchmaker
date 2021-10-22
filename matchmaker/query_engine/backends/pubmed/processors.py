@@ -2,7 +2,7 @@ from postal.expand import expand_address
 from postal.parser import parse_address
 from typing import Optional, List, Tuple, Union
 from pydantic import BaseModel
-from matchmaker.query_engine.backends.pubmed_api import PubmedTopic, AbstractItem, IdSet
+from matchmaker.query_engine.backends.pubmed.api import PubmedTopic, AbstractItem, IdSet
 
 class ProcessedAuthorBase(BaseModel):
     institution: Optional[str]

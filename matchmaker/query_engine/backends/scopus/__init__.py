@@ -8,7 +8,7 @@ from matchmaker.query_engine.backends import (
     NewAsyncClient,
     RateLimiter,
 )
-from matchmaker.query_engine.backends.scopus_api_new import (
+from matchmaker.query_engine.backends.scopus.api import (
     AffiliationSearchQuery,
     AffiliationSearchResult,
     ScopusAuthorSearchQuery,
@@ -25,7 +25,7 @@ from matchmaker.query_engine.backends.scopus_api_new import (
     get_scopus_query_remaining_in_cache,
     scopus_search_on_query,
 )
-from matchmaker.query_engine.backends.scopus_processors import (
+from matchmaker.query_engine.backends.scopus.processors import (
     ProcessedScopusSearchResult,
 )
 from matchmaker.query_engine.backends.tools import (

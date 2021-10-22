@@ -1,12 +1,12 @@
 from typing import Annotated, List, Literal, Optional, Union
 
 from aiohttp import ClientSession
-from matchmaker.query_engine.backends.scopus_constants import Allowance, Length
-from matchmaker.query_engine.backends.scopus_quota_cache import (
+from matchmaker.query_engine.backends.scopus.constants import Allowance, Length
+from matchmaker.query_engine.backends.scopus.quota_cache import (
     get_remaining_in_cache,
     store_quota_in_cache,
 )
-from matchmaker.query_engine.backends.scopus_utils import create_config
+from matchmaker.query_engine.backends.scopus.utils import create_config
 from matchmaker.query_engine.query_types import (
     Abstract,
     And,

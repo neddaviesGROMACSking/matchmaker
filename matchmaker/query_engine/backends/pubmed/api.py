@@ -1,13 +1,24 @@
-import xmltodict
+import json
+from typing import List, Optional, Union
+from typing import Annotated, Dict, Literal, Tuple
 from urllib.parse import quote_plus
 import xml.etree.ElementTree as xml_parse
-from pydantic import BaseModel, Field
-from typing import List, Union, Optional
-import json
 
-from matchmaker.query_engine.query_types import And, Or, Title, AuthorName, Journal, Abstract, Institution, Keyword, Year, StringPredicate
-from typing import Annotated, Literal, Tuple, Dict
 from aiohttp import ClientSession
+from matchmaker.query_engine.query_types import (
+    Abstract,
+    And,
+    AuthorName,
+    Institution,
+    Journal,
+    Keyword,
+    Or,
+    StringPredicate,
+    Title,
+    Year,
+)
+from pydantic import BaseModel, Field
+import xmltodict
 
 def inspect_xml_dict(i):
     return xmltodict.parse(

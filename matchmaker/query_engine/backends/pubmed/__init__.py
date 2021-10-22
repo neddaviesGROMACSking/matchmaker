@@ -12,7 +12,7 @@ from matchmaker.query_engine.backends import (
     NewAsyncClient,
     RateLimiter,
 )
-from matchmaker.query_engine.backends.pubmed_api import (
+from matchmaker.query_engine.backends.pubmed.api import (
     MeshTopic,
     PubmedAuthor,
     PubmedEFetchData,
@@ -24,7 +24,7 @@ from matchmaker.query_engine.backends.pubmed_api import (
     elink_on_id_list,
     esearch_on_query,
 )
-from matchmaker.query_engine.backends.pubmed_processsors import (
+from matchmaker.query_engine.backends.pubmed.processors import (
     ProcessedAuthor,
     ProcessedData,
     ProcessedEFetchData,
