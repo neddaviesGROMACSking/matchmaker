@@ -1,10 +1,25 @@
-from pydantic import BaseModel, Field
-from typing import Optional, List, Any, Union, Literal, Annotated
-from matchmaker.query_engine.query_types import And, Or, Title,  Abstract, Keyword, Year, StringPredicate, AuthorID
-from pybliometrics.scopus import ScopusSearch, AffiliationSearch, AuthorSearch
-from matchmaker.query_engine.backends.scopus_quota_cache import store_quota_in_cache, get_remaining_in_cache
-from matchmaker.query_engine.backends.scopus_constants import Length, Allowance
+from typing import Annotated, List, Literal, Optional, Union
+
 from aiohttp import ClientSession
+from matchmaker.query_engine.backends.scopus_constants import Allowance, Length
+from matchmaker.query_engine.backends.scopus_quota_cache import (
+    get_remaining_in_cache,
+    store_quota_in_cache,
+)
+from matchmaker.query_engine.backends.scopus_utils import create_config
+from matchmaker.query_engine.query_types import (
+    Abstract,
+    And,
+    AuthorID,
+    Keyword,
+    Or,
+    StringPredicate,
+    Title,
+    Year,
+)
+from pybliometrics.scopus import AffiliationSearch, AuthorSearch, ScopusSearch
+from pydantic import BaseModel, Field
+
 def query_to_term(query):
     def make_year_term(start_year: Optional[int] = None, end_year: Optional[int] = None):
         if start_year is None and end_year is None:
@@ -285,8 +300,11 @@ or_int.update_forward_refs()
 async def scopus_search_on_query(
     query: ScopusSearchQuery,
     client: ClientSession,
-    view: Union[Literal['COMPLETE'], Literal['STANDARD']] = 'COMPLETE'
+    view: Union[Literal['COMPLETE'], Literal['STANDARD']],
+    api_key: str,
+    institution_token: str
 ) -> List[ScopusSearchResult]:
+    create_config(api_key, institution_token)
     term = query_to_term(query.dict()['__root__'])
     scopus_results = ScopusSearch(term, view = view, verbose = True)
     store_quota_in_cache(scopus_results)
@@ -302,8 +320,11 @@ async def scopus_search_on_query(
 async def get_scopus_query_no_requests(
     query: ScopusSearchQuery,
     client: ClientSession,
-    view: Union[Literal['COMPLETE'], Literal['STANDARD']] = 'COMPLETE'
+    view: Union[Literal['COMPLETE'], Literal['STANDARD']],
+    api_key: str,
+    institution_token: str
 ) -> int:
+    create_config(api_key, institution_token)
     term = query_to_term(query.dict()['__root__'])
     request_search = ScopusSearch(term, download = False, view = view)
     store_quota_in_cache(request_search)
@@ -321,7 +342,10 @@ async def get_scopus_query_remaining_in_cache() -> int:
 async def author_search_on_query(
     query: ScopusAuthorSearchQuery,
     client: ClientSession,
+    api_key: str,
+    institution_token: str
 ) -> List[ScopusAuthorSearchResult]:
+    create_config(api_key, institution_token)
     term = query_to_term(query.dict()['__root__'])
     author_results = AuthorSearch(term, verbose = True)
     store_quota_in_cache(author_results)
@@ -336,7 +360,10 @@ async def author_search_on_query(
 async def get_author_query_no_requests(
     query: ScopusAuthorSearchQuery,
     client: ClientSession,
+    api_key: str,
+    institution_token: str
 ) -> int:
+    create_config(api_key, institution_token)
     term = query_to_term(query.dict()['__root__'])
     request_search = AuthorSearch(term, download = False)
     store_quota_in_cache(request_search)
@@ -351,7 +378,10 @@ async def get_author_query_remaining_in_cache() -> int:
 async def affiliation_search_on_query(
     query: AffiliationSearchQuery,
     client: ClientSession,
+    api_key: str,
+    institution_token: str
 ) -> List[AffiliationSearchResult]:
+    create_config(api_key, institution_token)
     term = query_to_term(query.dict()['__root__'])
     affil_results = AffiliationSearch(term, verbose = True)
     store_quota_in_cache(affil_results)
@@ -366,7 +396,10 @@ async def affiliation_search_on_query(
 async def get_affiliation_query_no_requests(
     query: AffiliationSearchQuery,
     client: ClientSession,
+    api_key: str,
+    institution_token: str
 ) -> int:
+    create_config(api_key, institution_token)
     term = query_to_term(query.dict()['__root__'])
     request_search = AffiliationSearch(term, download = False)
     store_quota_in_cache(request_search)

@@ -620,19 +620,22 @@ class AuthorSearchQueryEngine(
 
 
 
-class PubMedBackend(Backend):
-    def __init__(self, api_key: str, max_requests_per_second: int = 9):
+class PubmedBackend(Backend):
+    def __init__(self, api_key: str):
         self.api_key = api_key
-        self.rate_limiter = RateLimiter(max_requests_per_second = max_requests_per_second)
+        self.rate_limiter = RateLimiter(max_requests_per_second = 9)
     
-    def paperSearchEngine(self) -> PaperSearchQueryEngine:
+    def paper_search_engine(self) -> PaperSearchQueryEngine:
         return PaperSearchQueryEngine(
             api_key = self.api_key, 
             rate_limiter=self.rate_limiter
         )
 
-    def authorSearchEngine(self) -> AuthorSearchQueryEngine:
+    def author_search_engine(self) -> AuthorSearchQueryEngine:
         return AuthorSearchQueryEngine(
             api_key = self.api_key, 
             rate_limiter=self.rate_limiter
         )
+
+    def institution_search_engine(self) -> None:
+        raise NotImplementedError

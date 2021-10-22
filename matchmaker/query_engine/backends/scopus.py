@@ -1,19 +1,20 @@
-from typing import List, Tuple, Callable, Awaitable, Dict
-
+from html import unescape
+from typing import Awaitable, Callable, Dict, List, Tuple
+from matchmaker.query_engine.backend import Backend
 from matchmaker.query_engine.backends import (
     BaseAuthorSearchQueryEngine,
-    BasePaperSearchQueryEngine,
     BaseInstitutionSearchQueryEngine,
+    BasePaperSearchQueryEngine,
+    NewAsyncClient,
     RateLimiter,
-    NewAsyncClient
 )
 from matchmaker.query_engine.backends.scopus_api_new import (
-    ScopusSearchQuery,
-    ScopusSearchResult,
-    ScopusAuthorSearchQuery,
-    ScopusAuthorSearchResult,
     AffiliationSearchQuery,
     AffiliationSearchResult,
+    ScopusAuthorSearchQuery,
+    ScopusAuthorSearchResult,
+    ScopusSearchQuery,
+    ScopusSearchResult,
     affiliation_search_on_query,
     author_search_on_query,
     get_affiliation_query_no_requests,
@@ -24,14 +25,20 @@ from matchmaker.query_engine.backends.scopus_api_new import (
     get_scopus_query_remaining_in_cache,
     scopus_search_on_query,
 )
-from matchmaker.query_engine.backends.scopus_utils import create_config
-from matchmaker.query_engine.query_types import AuthorSearchQuery, PaperSearchQuery, InstitutionSearchQuery
-from aiohttp import ClientSession
-from matchmaker.query_engine.data_types import AuthorData, PaperData, InstitutionData
-from matchmaker.query_engine.backends.tools import replace_dict_tags, execute_callback_on_tag
-from matchmaker.query_engine.backends.scopus_processors import ProcessedScopusSearchResult
-from pprint import pprint
-from html import unescape
+from matchmaker.query_engine.backends.scopus_processors import (
+    ProcessedScopusSearchResult,
+)
+from matchmaker.query_engine.backends.tools import (
+    execute_callback_on_tag,
+    replace_dict_tags,
+)
+from matchmaker.query_engine.data_types import AuthorData, InstitutionData, PaperData
+from matchmaker.query_engine.query_types import (
+    AuthorSearchQuery,
+    InstitutionSearchQuery,
+    PaperSearchQuery,
+)
+
 class NotEnoughRequests(Exception):
     pass
 
@@ -105,8 +112,9 @@ def institution_query_to_affiliation(query: InstitutionSearchQuery) -> Affiliati
 
 class PaperSearchQueryEngine(
         BasePaperSearchQueryEngine[List[ScopusSearchResult], List[ProcessedScopusSearchResult]]):
-    def __init__(self, api_key:str , institution_token: str, rate_limiter: RateLimiter = RateLimiter(), *args, **kwargs):
-        create_config(api_key, institution_token)
+    def __init__(self, api_key:str , institution_token: str, rate_limiter: RateLimiter = RateLimiter(max_requests_per_second = 9), *args, **kwargs):
+        self.api_key = api_key
+        self.institution_token = institution_token
         super().__init__(rate_limiter, *args, **kwargs)
     
     async def _query_to_awaitable(
@@ -118,7 +126,7 @@ class PaperSearchQueryEngine(
         cache_remaining = await get_scopus_query_remaining_in_cache()
         view = 'COMPLETE'
         if cache_remaining > 1:
-            no_requests = await get_scopus_query_no_requests(scopus_search_query, client, view = view)
+            no_requests = await get_scopus_query_no_requests(scopus_search_query, client, view, self.api_key, self.institution_token)
         else:
             raise NotEnoughRequests()
         cache_remaining = await get_scopus_query_remaining_in_cache()
@@ -128,7 +136,7 @@ class PaperSearchQueryEngine(
             'scopus_search': no_requests,
         }
         async def make_coroutine(client: NewAsyncClient) -> List[ScopusSearchResult]:
-            return await scopus_search_on_query(scopus_search_query, client, view)
+            return await scopus_search_on_query(scopus_search_query, client, view, self.api_key, self.institution_token)
         return make_coroutine, metadata
     
     async def _post_process(self, query: PaperSearchQuery, data: List[ScopusSearchResult]) -> List[ProcessedScopusSearchResult]:
@@ -277,8 +285,9 @@ class PaperSearchQueryEngine(
 class AuthorSearchQueryEngine(
     BaseAuthorSearchQueryEngine[List[ScopusAuthorSearchResult], List[AuthorData]]
 ):
-    def __init__(self, api_key:str , institution_token: str, rate_limiter: RateLimiter = RateLimiter(), *args, **kwargs):
-        create_config(api_key, institution_token)
+    def __init__(self, api_key:str , institution_token: str, rate_limiter: RateLimiter = RateLimiter(max_requests_per_second = 2), *args, **kwargs):
+        self.api_key = api_key
+        self.institution_token = institution_token
         super().__init__(rate_limiter, *args, **kwargs)
     
     async def _query_to_awaitable(
@@ -289,7 +298,7 @@ class AuthorSearchQueryEngine(
         author_search_query = author_query_to_scopus_author(query)
         cache_remaining = await get_author_query_remaining_in_cache()
         if cache_remaining > 1:
-            no_requests = await get_author_query_no_requests(author_search_query, client)
+            no_requests = await get_author_query_no_requests(author_search_query, client, self.api_key, self.institution_token)
         else:
             raise NotEnoughRequests()
         cache_remaining = await get_author_query_remaining_in_cache()
@@ -299,7 +308,7 @@ class AuthorSearchQueryEngine(
             'author_search': no_requests,
         }
         async def make_coroutine(client: NewAsyncClient) -> List[ScopusAuthorSearchResult]:
-            return await author_search_on_query(author_search_query, client)
+            return await author_search_on_query(author_search_query, client, self.api_key, self.institution_token)
         return make_coroutine, metadata
     
     async def _post_process(self, query: PaperSearchQuery, data: List[ScopusAuthorSearchResult]) -> List[AuthorData]:
@@ -355,8 +364,9 @@ class AuthorSearchQueryEngine(
 class InstitutionSearchQueryEngine(
     BaseInstitutionSearchQueryEngine[List[AffiliationSearchResult], List[InstitutionData]]
 ):
-    def __init__(self, api_key:str , institution_token: str, rate_limiter: RateLimiter = RateLimiter(), *args, **kwargs):
-        create_config(api_key, institution_token)
+    def __init__(self, api_key:str , institution_token: str, rate_limiter: RateLimiter = RateLimiter(max_requests_per_second = 6), *args, **kwargs):
+        self.api_key = api_key
+        self.institution_token = institution_token
         super().__init__(rate_limiter, *args, **kwargs)
     
     async def _query_to_awaitable(
@@ -367,7 +377,7 @@ class InstitutionSearchQueryEngine(
         affiliation_search_query = institution_query_to_affiliation(query)
         cache_remaining = await get_affiliation_query_remaining_in_cache()
         if cache_remaining > 1:
-            no_requests = await get_affiliation_query_no_requests(affiliation_search_query, client)
+            no_requests = await get_affiliation_query_no_requests(affiliation_search_query, client, self.api_key, self.institution_token)
         else:
             raise NotEnoughRequests()
         cache_remaining = await get_affiliation_query_remaining_in_cache()
@@ -377,7 +387,7 @@ class InstitutionSearchQueryEngine(
             'affiliation_search': no_requests,
         }
         async def make_coroutine(client: NewAsyncClient) -> List[AffiliationSearchResult]:
-            return await affiliation_search_on_query(affiliation_search_query, client)
+            return await affiliation_search_on_query(affiliation_search_query, client, self.api_key, self.institution_token)
         return make_coroutine, metadata
     
     async def _post_process(self, query: PaperSearchQuery, data: List[AffiliationSearchResult]) -> List[InstitutionData]:
@@ -401,3 +411,27 @@ class InstitutionSearchQueryEngine(
     
     async def _data_from_processed(self, data: List[InstitutionData]) -> List[InstitutionData]:
         return data
+
+
+class ScopusBackend(Backend):
+    def __init__(self, api_key: str, institution_token: str):
+        self.api_key = api_key
+        self.institution_token = institution_token
+    
+    def paper_search_engine(self) -> PaperSearchQueryEngine:
+        return PaperSearchQueryEngine(
+            api_key = self.api_key, 
+            institution_token = self.institution_token
+        )
+
+    def author_search_engine(self) -> AuthorSearchQueryEngine:
+        return AuthorSearchQueryEngine(
+            api_key = self.api_key, 
+            institution_token = self.institution_token
+        )
+
+    def institution_search_engine(self) -> InstitutionSearchQueryEngine:
+        return InstitutionSearchQueryEngine(
+            api_key = self.api_key, 
+            institution_token = self.institution_token
+        )

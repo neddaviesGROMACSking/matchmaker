@@ -1,6 +1,6 @@
 from matchmaker.query_engine.query_types import PaperSearchQuery, AuthorSearchQuery
-from matchmaker.query_engine.backends.pubmed import PubmedBackend
-from secret import pubmed_api_key
+from matchmaker.query_engine.backends.scopus import ScopusBackend
+from secret import scopus_api_key, scopus_inst_token
 import asyncio
 author_search = AuthorSearchQuery.parse_obj({
     'tag': 'and',
@@ -35,10 +35,10 @@ paper_search = PaperSearchQuery.parse_obj({
         }
     ]
 })
-pubmed_backend = PubmedBackend(api_key=pubmed_api_key)
+scopus_backend = ScopusBackend(scopus_api_key, scopus_inst_token)
 async def main():
-    paper_searcher = pubmed_backend.paper_search_engine()
-    author_searcher = pubmed_backend.author_search_engine()
+    paper_searcher = scopus_backend.paper_search_engine()
+    author_searcher = scopus_backend.author_search_engine()
 
     paper_results = await paper_searcher(paper_search)
     author_results = await author_searcher(author_search)
