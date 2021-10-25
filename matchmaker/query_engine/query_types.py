@@ -110,6 +110,9 @@ class Topic(BaseModel):
     tag: Literal['topic'] = 'topic'
     operator: StringPredicate
 
+class Doi(BaseModel):
+    tag: Literal['doi'] = 'doi'
+    operator: StringPredicate
 
 and_int = And['PaperSearchQuery']
 or_int = Or['PaperSearchQuery']
@@ -120,6 +123,7 @@ class PaperSearchQuery(BaseModel):
         and_int,
         or_int,
         IdQuery,
+        Doi,
         Title,
         AuthorName,
         AuthorID,

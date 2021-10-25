@@ -8,7 +8,7 @@ from matchmaker.query_engine.slightly_less_abstract import SlightlyLessAbstractQ
 from matchmaker.query_engine.backend import Backend
 from typing import Optional, Tuple, Callable, Awaitable, Dict, List, Generic, TypeVar
 from asyncio import get_running_loop, gather
-from math import ceil
+
 from dataclasses import dataclass
 NativeData = TypeVar('NativeData')
 @dataclass
@@ -21,16 +21,33 @@ class BaseNativeQuery(Generic[NativeData], AbstractNativeQuery):
         return self.metadata[method]
 
 async def get_doi_list_from_data(papers: List[PaperData]) -> List[str]:
-    return []
+    return [paper.paper_id.doi for paper in papers if paper.paper_id.doi is not None]
 
 async def get_doi_query_from_list(dois: List[str]) -> PaperSearchQuery:
-    return PaperSearchQuery()
+    query = {
+        'tag': 'or',
+        'fields_': [
+            {
+                'tag': 'doi',
+                'operator': {
+                    'tag': 'equal',
+                    'value': i
+                }
+            } for i in dois
+        ]
+    }
+    return PaperSearchQuery.parse_obj(query)
 
 async def get_dois_remaining(scopus_dois: List[str], pubmed_dois: List[str]) -> List[str]:
-    return []
+    print(scopus_dois)
+    print(pubmed_dois)
+
+    remaining_dois = [doi for doi in scopus_dois if doi not in pubmed_dois]
+    print(remaining_dois)
+    return remaining_dois
 
 class PaperSearchQueryEngine(
-    SlightlyLessAbstractQueryEngine[PaperSearchQuery, BaseNativeQuery[PaperData], PaperData, PaperData, PaperData]):
+    SlightlyLessAbstractQueryEngine[PaperSearchQuery, BaseNativeQuery[List[PaperData]], List[PaperData], List[PaperData], List[PaperData]]):
     def __init__(
         self, 
         scopus_paper_search,
@@ -46,7 +63,6 @@ class PaperSearchQueryEngine(
         self.overall_request_limit = overall_request_limit
     
     async def _query_to_awaitable(self, query: PaperSearchQuery) -> Tuple[Callable[[], Awaitable[List[PaperData]]], Dict[str, int]]:
-        # Step 1 - get standard results
         full_native_query = await self.scopus_paper_search.get_native_query(query)
         full_native_request_no = full_native_query.metadata['scopus_search']
         standard_native_query = await self.scopus_paper_standard_search.get_native_query(query) 
@@ -79,10 +95,10 @@ class PaperSearchQueryEngine(
                     binned_dois = []
                     current_bin_index = 0
                     for i in dois:
-                        if current_bin_index < len(binned_dois):
+                        if current_bin_index >= len(binned_dois):
                             binned_dois.append([])
                         binned_dois[current_bin_index].append(i)
-                        if binned_dois[current_bin_index] >= bin_limit:
+                        if len(binned_dois[current_bin_index]) >= bin_limit:
                             current_bin_index += 1
                     return binned_dois
                 #split doi list into blocks of 25 (25 per request),
@@ -90,13 +106,13 @@ class PaperSearchQueryEngine(
                 binned_dois = bin_dois(dois_remaining)
 
                 async def get_paper_data_from_dois(dois):
-                    doi_query_scopus = await get_doi_query_from_list(dois_remaining)
+                    doi_query_scopus = await get_doi_query_from_list(dois)
                     return await self.scopus_paper_search(doi_query_scopus)
-                results = gather(*list(map(get_paper_data_from_dois, binned_dois)))
+                results = await gather(*list(map(get_paper_data_from_dois, binned_dois)))
                 concat_results = []
                 for i in results:
                     concat_results += i
-                return concat_results
+                return pubmed_data + concat_results
 
         return make_coroutine, metadata
     
@@ -104,6 +120,9 @@ class PaperSearchQueryEngine(
         awaitable, metadata = await self._query_to_awaitable(query)
         return BaseNativeQuery(awaitable, metadata)
     
+    async def _run_native_query(self, query: BaseNativeQuery[List[PaperData]]) -> List[PaperData]:
+        return await query.coroutine_function()
+
     async def _post_process(self, query: PaperSearchQuery, data: List[PaperData]) -> List[PaperData]:
         return data
 
@@ -122,7 +141,7 @@ class OptimisedScopusBackend(Backend):
     def paper_search_engine(self) -> PaperSearchQueryEngine:
         return PaperSearchQueryEngine(
             self.scopus_backend.paper_search_engine(full_view = True), 
-            self.scopus_backend.paper_search_engine(full_view = False),
+            self.scopus_backend.paper_search_engine(full_view = True),
             self.pubmed_backend.paper_search_engine()
         )
 

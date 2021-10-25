@@ -1,5 +1,6 @@
 from asyncio import gather, get_running_loop
 from copy import copy
+from dataclasses import replace
 from pprint import pprint
 from typing import Annotated, Awaitable, Callable, Dict, List, Tuple, Union
 
@@ -46,7 +47,10 @@ from matchmaker.query_engine.query_types import (
     Year,
 )
 from pydantic import BaseModel, Field
-
+from matchmaker.query_engine.backends.tools import (
+    replace_ids,
+    replace_dict_tags,
+)
 
 # TODO Use generators to pass information threough all levels
 
@@ -92,7 +96,13 @@ def paper_query_to_esearch(query: PaperSearchQuery):
     # TODO convert topic to elocation
     # convert id.pubmed to pmid
     # convert id.doi to elocation
-    return PubmedESearchQuery.parse_obj(query.dict()['__root__'])
+    #new_query_dict = replace_ids(query.dict()['__root__'])
+    new_query_dict = query.dict()['__root__']
+    new_query_dict = replace_dict_tags(
+        new_query_dict,
+        elocationid = 'doi'
+    )
+    return PubmedESearchQuery.parse_obj(new_query_dict)
 def author_query_to_esearch(query: AuthorSearchQuery):
     # TODO convert topic to elocation
     # convert id.pubmed to pmid

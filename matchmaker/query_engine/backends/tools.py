@@ -45,3 +45,9 @@ def replace_dict_tags(dict_structure, **tags):
         current_dict_structure = execute_callback_on_tag(current_dict_structure, old_value, callback)
     return current_dict_structure
 
+import pdb
+def replace_ids(dict_structure):
+    def id_callback(dict_structure):
+        pdb.set_trace()
+    return execute_callback_on_tag(dict_structure, 'id', id_callback)
+
