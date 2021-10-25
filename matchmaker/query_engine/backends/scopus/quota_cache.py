@@ -16,8 +16,13 @@ def store_quota_in_cache(results):
                     reset_time_str = file_reader_list[0][1]
                     reset_time = time.mktime(datetime.strptime(reset_time_str, "%Y-%m-%d %H:%M:%S").timetuple())
                     current_time = time.time()
-                    if float(reset_time) < current_time:
-                        csvfile.truncate(0)
+                    reset_file = float(reset_time) < current_time
+                else:
+                    reset_file = False
+            if reset_file:
+                with open(path_new, 'w+', newline='') as csvfile:
+                    pass
+
         except FileNotFoundError:
             pass
         with open(path_new, 'a+', newline='') as csvfile:
