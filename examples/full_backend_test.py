@@ -44,6 +44,7 @@ inst_search = InstitutionSearchQuery.parse_obj({
         'value': "Scotland"
     }
 })
+
 pubmed_backend = PubmedBackend(api_key=pubmed_api_key)
 scopus_backend = ScopusBackend(scopus_api_key, scopus_inst_token)
 async def main():
@@ -56,8 +57,10 @@ async def main():
     pub_paper_results = await pub_paper_searcher(paper_search)
     pub_author_results = await pub_author_searcher(author_search)
     sco_paper_results = await sco_paper_searcher(paper_search)
-    sco_author_results = await sco_paper_searcher(author_search)
+    sco_author_results = await sco_author_searcher(author_search)
     sco_inst_results = await sco_inst_searcher(inst_search)
-
+    print(sco_author_results[0])
+    print()
+    print(pub_author_results[0])
     return pub_paper_results
 pub_paper_results = asyncio.run(main())

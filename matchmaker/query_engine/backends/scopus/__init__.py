@@ -112,9 +112,13 @@ def institution_query_to_affiliation(query: InstitutionSearchQuery) -> Affiliati
 
 class PaperSearchQueryEngine(
         BasePaperSearchQueryEngine[List[ScopusSearchResult], List[ProcessedScopusSearchResult]]):
-    def __init__(self, api_key:str , institution_token: str, rate_limiter: RateLimiter = RateLimiter(max_requests_per_second = 9), *args, **kwargs):
+    def __init__(self, api_key:str , institution_token: str, rate_limiter: RateLimiter = RateLimiter(max_requests_per_second = 9), full_view: bool = True, *args, **kwargs):
         self.api_key = api_key
         self.institution_token = institution_token
+        if full_view:
+            self.view = 'COMPLETE'
+        else:
+            self.view = 'STANDARD'
         super().__init__(rate_limiter, *args, **kwargs)
     
     async def _query_to_awaitable(
@@ -124,7 +128,7 @@ class PaperSearchQueryEngine(
     ) -> Tuple[Callable[[NewAsyncClient], Awaitable[List[ScopusSearchResult]]], Dict[str, int]]:
         scopus_search_query = paper_query_to_scopus(query)
         cache_remaining = await get_scopus_query_remaining_in_cache()
-        view = 'COMPLETE'
+        view = self.view
         if cache_remaining > 1:
             no_requests = await get_scopus_query_no_requests(scopus_search_query, client, view, self.api_key, self.institution_token)
         else:
@@ -418,10 +422,11 @@ class ScopusBackend(Backend):
         self.api_key = api_key
         self.institution_token = institution_token
     
-    def paper_search_engine(self) -> PaperSearchQueryEngine:
+    def paper_search_engine(self, full_view: bool = True) -> PaperSearchQueryEngine:
         return PaperSearchQueryEngine(
             api_key = self.api_key, 
-            institution_token = self.institution_token
+            institution_token = self.institution_token,
+            full_view = full_view
         )
 
     def author_search_engine(self) -> AuthorSearchQueryEngine:

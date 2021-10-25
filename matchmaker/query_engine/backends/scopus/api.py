@@ -300,7 +300,7 @@ or_int.update_forward_refs()
 async def scopus_search_on_query(
     query: ScopusSearchQuery,
     client: ClientSession,
-    view: Union[Literal['COMPLETE'], Literal['STANDARD']],
+    view: str,
     api_key: str,
     institution_token: str
 ) -> List[ScopusSearchResult]:
@@ -320,7 +320,7 @@ async def scopus_search_on_query(
 async def get_scopus_query_no_requests(
     query: ScopusSearchQuery,
     client: ClientSession,
-    view: Union[Literal['COMPLETE'], Literal['STANDARD']],
+    view: str,
     api_key: str,
     institution_token: str
 ) -> int:

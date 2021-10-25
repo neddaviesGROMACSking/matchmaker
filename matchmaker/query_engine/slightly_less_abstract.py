@@ -29,3 +29,8 @@ class SlightlyLessAbstractQueryEngine(Generic[Query, NativeQuery, NativeData, Pr
     def __call__(self, query: Query) -> Data:
         nd = self._run_native_query(self._query_to_native(query))
         return self._data_from_processed(self._post_process(query, nd))
+    def get_native_query(self, query: Query) -> NativeQuery:
+        return self._query_to_native(query)
+    def get_data_from_native_query(self, query: NativeQuery):
+        nd = self._run_native_query(query)
+        return self._data_from_processed(self._post_process(query, nd))
