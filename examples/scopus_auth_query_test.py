@@ -1,4 +1,4 @@
-from matchmaker.query_engine.backends.scopus_api_new import (
+from matchmaker.query_engine.backends.scopus.api import (
     ScopusAuthorSearchQuery,
     author_search_on_query,
     get_author_query_no_requests,

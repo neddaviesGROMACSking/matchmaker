@@ -14,7 +14,6 @@ op_scopus_backend = OptimisedScopusBackend(
     )
 )
 
-op_scopus_query_engine = op_scopus_backend.paper_search_engine()
 
 
 paper_search = PaperSearchQuery.parse_obj({
@@ -38,9 +37,34 @@ paper_search = PaperSearchQuery.parse_obj({
     ]
 })
 
-async def main():
+author_search = AuthorSearchQuery.parse_obj({
+    'tag': 'and',
+    'fields_': [
+        {
+            'tag': 'author',
+            'operator': {
+                'tag': 'equal',
+                'value': 'Green'
+            }
+        },
+        {
+            'tag': 'year',
+            'operator': {
+                'tag': 'range',
+                'lower_bound': '2009',
+                'upper_bound': '2012'
+            }
+        }
+    ]
+})
 
-    return await op_scopus_query_engine(paper_search)
+op_scopus_query_engine = op_scopus_backend.paper_search_engine()
+op_scopus_author_engine = op_scopus_backend.author_search_engine()
+async def main():
+    #return await op_scopus_query_engine(paper_search)
+    return await op_scopus_author_engine(author_search)
 
 res = asyncio.run(main())
-print([res.paper_id.doi for res in res])
+
+
+#print([res.paper_id.doi for res in res])

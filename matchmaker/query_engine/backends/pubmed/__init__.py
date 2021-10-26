@@ -47,11 +47,12 @@ from matchmaker.query_engine.query_types import (
     Year,
 )
 from pydantic import BaseModel, Field
+from pydantic.error_wrappers import ValidationError
 from matchmaker.query_engine.backends.tools import (
     replace_ids,
     replace_dict_tags,
 )
-
+from matchmaker.query_engine.backends.exceptions import QueryNotSupportedError
 # TODO Use generators to pass information threough all levels
 
 and_int = And['PubMedAuthorSearchQuery']
@@ -92,6 +93,7 @@ def make_doi_search_term(doi_list):
     return ' OR '.join(new_doi_list)
 
 
+
 def paper_query_to_esearch(query: PaperSearchQuery):
     # TODO convert topic to elocation
     # convert id.pubmed to pmid
@@ -102,7 +104,10 @@ def paper_query_to_esearch(query: PaperSearchQuery):
         new_query_dict,
         elocationid = 'doi'
     )
-    return PubmedESearchQuery.parse_obj(new_query_dict)
+    try:
+        return PubmedESearchQuery.parse_obj(new_query_dict)
+    except ValidationError as e:
+        raise QueryNotSupportedError(e.raw_errors, e.model)
 def author_query_to_esearch(query: AuthorSearchQuery):
     # TODO convert topic to elocation
     # convert id.pubmed to pmid

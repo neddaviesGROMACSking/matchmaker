@@ -153,6 +153,7 @@ class AuthorSearchQuery(BaseModel):
         AuthorID,
         Institution,
         InstitutionID,
+        Year
         #Topic
     ],
     Field(discriminator='tag')]

@@ -1,4 +1,4 @@
-from matchmaker.query_engine.backends.scopus_api_new import ScopusSearchQuery, get_scopus_query_remaining_in_cache, scopus_search_on_query, get_scopus_query_no_requests
+from matchmaker.query_engine.backends.scopus.api import ScopusSearchQuery, get_scopus_query_remaining_in_cache, scopus_search_on_query, get_scopus_query_no_requests
 import asyncio
 from secret import scopus_api_key, scopus_inst_token
 d = {
@@ -18,7 +18,7 @@ d = {
     'tag': 'auth',
     'operator': {
         'tag': 'equal',
-        'value': 'Pink'
+        'value': 'Mauve'
     }
 }
 

@@ -31,6 +31,8 @@ from matchmaker.query_engine.backends.scopus.processors import (
 from matchmaker.query_engine.backends.tools import (
     execute_callback_on_tag,
     replace_dict_tags,
+    get_available_model_tags,
+    check_model_tags
 )
 from matchmaker.query_engine.data_types import AuthorData, InstitutionData, PaperData
 from matchmaker.query_engine.query_types import (
@@ -38,7 +40,7 @@ from matchmaker.query_engine.query_types import (
     InstitutionSearchQuery,
     PaperSearchQuery,
 )
-
+import pdb
 class NotEnoughRequests(Exception):
     pass
 
@@ -52,6 +54,8 @@ def paper_query_to_scopus(query: PaperSearchQuery) -> ScopusSearchQuery:
         keyword = 'topic',
         affiliation = 'institution'
     )
+    model_tags = get_available_model_tags(ScopusSearchQuery)
+    check_model_tags(model_tags, new_query_dict)
     return ScopusSearchQuery.parse_obj(new_query_dict)
 
 def author_query_to_scopus_author(query: AuthorSearchQuery) -> ScopusAuthorSearchQuery:
@@ -91,6 +95,9 @@ def author_query_to_scopus_author(query: AuthorSearchQuery) -> ScopusAuthorSearc
         return new_dict_structure
     
     query_dict = query.dict()['__root__']
+
+
+
     new_query_dict = replace_dict_tags(
         query_dict,
         affiliation = 'institution',
@@ -98,7 +105,8 @@ def author_query_to_scopus_author(query: AuthorSearchQuery) -> ScopusAuthorSearc
     )
 
     new_query_dict = execute_callback_on_tag(new_query_dict, 'author', convert_author)
-
+    model_tags = get_available_model_tags(ScopusAuthorSearchQuery)
+    check_model_tags(model_tags, new_query_dict)
     return ScopusAuthorSearchQuery.parse_obj(new_query_dict)
 
 def institution_query_to_affiliation(query: InstitutionSearchQuery) -> AffiliationSearchQuery:
@@ -108,6 +116,8 @@ def institution_query_to_affiliation(query: InstitutionSearchQuery) -> Affiliati
         affiliation = 'institution',
         affiliationid = 'institutionid'
     )
+    model_tags = get_available_model_tags(AffiliationSearchQuery)
+    check_model_tags(model_tags, new_query_dict)
     return AffiliationSearchQuery.parse_obj(new_query_dict) 
 
 class PaperSearchQueryEngine(
@@ -208,8 +218,10 @@ class PaperSearchQueryEngine(
             new_paper_dict['author_names'] = new_author_names
 
             author_afids = paper_dict['author_afids']
-            author_afids = author_afids.split(';')
-            author_afids = [i.split('-') for i in author_afids]
+            if author_afids is not None:
+                author_afids = author_afids.split(';')
+                author_afids = [i.split('-') for i in author_afids]
+
             new_paper_dict['author_afids'] = author_afids
 
             author_ids = paper_dict['author_ids']
@@ -248,15 +260,19 @@ class PaperSearchQueryEngine(
             author_names = paper_dict['author_names']
             author_ids = paper_dict['author_ids']
             author_afids = paper_dict['author_afids']
+
             new_authors = []
             for j, author_name in enumerate(author_names):
                 author_id = author_ids[j]
-                author_afid = author_afids[j]
-                other_institutions = [{'id': k} for k in author_afid]
+                if author_afids is not None:
+                    author_afid = author_afids[j]
+                    other_institutions = [{'id': k} for k in author_afid]
+                else:
+                    other_institutions = []
                 new_author = {
                     'preferred_name': author_name,
                     'other_institutions': other_institutions,
-                    'author_id': author_id
+                    'id': author_id
                 }
                 new_authors.append(new_author)
             new_paper_dict['authors'] = new_authors
