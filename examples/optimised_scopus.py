@@ -41,6 +41,13 @@ author_search = AuthorSearchQuery.parse_obj({
     'tag': 'and',
     'fields_': [
         {
+            'tag': 'institution',
+            'operator': {
+                'tag': 'equal',
+                'value': 'Kings College'
+            }
+        },
+        {
             'tag': 'author',
             'operator': {
                 'tag': 'equal',
@@ -65,6 +72,6 @@ async def main():
     return await op_scopus_author_engine(author_search)
 
 res = asyncio.run(main())
-
+print(res)
 
 #print([res.paper_id.doi for res in res])
