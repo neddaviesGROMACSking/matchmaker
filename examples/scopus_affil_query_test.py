@@ -1,4 +1,4 @@
-from matchmaker.query_engine.backends.scopus_api_new import (
+from matchmaker.query_engine.backends.scopus.api import (
     AffiliationSearchQuery,
     affiliation_search_on_query,
     get_affiliation_query_no_requests,

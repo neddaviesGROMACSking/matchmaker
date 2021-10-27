@@ -9,8 +9,8 @@ class ProcessedScopusSearchResult(BaseModel):
     doi: Optional[str] 
     pubmed_id: Optional[str] 
     title: str 
-    author_names: List[Name] 
-    author_ids: List[str] 
+    author_names: Optional[List[Name]]
+    author_ids: Optional[List[str]]
     author_afids: Optional[List[List[str]] ]
     description: Optional[str] 
     authkeywords: Optional[List[str]] 

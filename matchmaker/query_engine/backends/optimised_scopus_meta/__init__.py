@@ -20,6 +20,20 @@ from copy import deepcopy
 NativeData = TypeVar('NativeData')
 DictStructure = Dict[str, Union[str, 'ListStructure', 'DictStructure']]
 ListStructure = List[Union[str, 'ListStructure', 'DictStructure']]
+
+
+
+def bin_items(items: List[str], bin_limit: int) -> List[List[str]]:
+    binned_items = []
+    current_bin_index = 0
+    for i in items:
+        if current_bin_index >= len(binned_items):
+            binned_items.append([])
+        binned_items[current_bin_index].append(i)
+        if len(binned_items[current_bin_index]) >= bin_limit:
+            current_bin_index += 1
+    return binned_items
+
 @dataclass
 class BaseNativeQuery(Generic[NativeData], AbstractNativeQuery):
     coroutine_function: Callable[[], Awaitable[NativeData]]
@@ -93,19 +107,10 @@ class PaperSearchQueryEngine(
             if self.complete_search_request_limit < complete_no_requests:
                 return pubmed_data
             else:
-                def bin_dois(dois: List[str], bin_limit: int = 25) -> List[List[str]]:
-                    binned_dois = []
-                    current_bin_index = 0
-                    for i in dois:
-                        if current_bin_index >= len(binned_dois):
-                            binned_dois.append([])
-                        binned_dois[current_bin_index].append(i)
-                        if len(binned_dois[current_bin_index]) >= bin_limit:
-                            current_bin_index += 1
-                    return binned_dois
+
                 #split doi list into blocks of 25 (25 per request),
                 # to reduce url length per length
-                binned_dois = bin_dois(dois_remaining)
+                binned_dois = bin_items(dois_remaining, 25)
 
                 async def get_paper_data_from_dois(dois):
                     doi_query_scopus = await get_doi_query_from_list(dois)
@@ -148,7 +153,6 @@ class AuthorSearchQueryEngine(
 
         native_paper_query = await self.scopus_paper_search.get_native_query(query)
         native_paper_query_request_no = native_paper_query.metadata['scopus_search']
-        print(native_paper_query_request_no)
         try:
             native_author_query = await self.scopus_author_search.get_native_query(query)
         except TagNotFound:
@@ -161,7 +165,7 @@ class AuthorSearchQueryEngine(
             metadata['institution_search'] = 1
         else:
             metadata = native_paper_query.metadata
-
+        follow_up_necessary = False
         async def make_coroutine() -> List[AuthorData]:
             async def get_unique_authors(query: AuthorSearchQuery, papers: List[PaperData]) -> List[AuthorData]:
                 async def construct_author_in_query(query: AuthorSearchQuery) -> Callable[[AuthorData], Optional[AuthorData]]:
@@ -171,10 +175,7 @@ class AuthorSearchQueryEngine(
                             institutions.append(dict_structure)
                         execute_callback_on_tag(query.dict()['__root__'], 'institution', store_institution_callback)
                         execute_callback_on_tag(query.dict()['__root__'], 'institutionid', store_institution_callback)
-                        institution_query_dict = {
-                            'tag': 'or',
-                            'fields_': institutions
-                        }
+
                         inst_mapper = []
                         all_insts = []
                         for institution in institutions:
@@ -209,24 +210,21 @@ class AuthorSearchQueryEngine(
                                 new_other_institution = get_more_institution_details(other_institution, institutions)
                                 if new_other_institution is not None:
                                     new_author.other_institutions[i] = new_other_institution
-                            #print(author)
-                            #print(new_author)
-                            #print()
 
                             return new_author
                         
                         def author_matches_query(query: AuthorSearchQuery, author: AuthorData) -> bool:
                             def author_matches_query_inner(
-                                institution_names: List[Optional[str]], 
-                                institution_ids: List[Optional[str]],
+                                institution_ids: List[str],
                                 author_name: Optional[str],
                                 author_id: Optional[str]
                             ) -> Callable[[AuthorSearchQuery], bool]:
                                 def query_to_term(query) -> bool:
-                                    def get_institution_ids_from_mapper(inst_mapper, query):
+                                    def get_institution_ids_from_mapper(inst_mapper, query) -> List[str]:
                                         for i in inst_mapper:
                                             if i[0] == query:
                                                 return [j.id for j in i[1]]
+                                        return []
                                     def make_string_term(body_string: Optional[str], q_value: str, operator: str) -> bool:
                                         if body_string is None:
                                             return False
@@ -256,7 +254,6 @@ class AuthorSearchQueryEngine(
                                     elif query['tag'] == 'institution':
                                         operator = query['operator']
                                         value = operator['value']
-
                                         query_institution_ids = get_institution_ids_from_mapper(inst_mapper, query)
                                         return any([auth_inst_id in query_institution_ids for auth_inst_id in institution_ids])
                                     elif query['tag'] == 'institutionid':
@@ -275,10 +272,9 @@ class AuthorSearchQueryEngine(
                             institutions = author.other_institutions
                             if author.institution_current is not None:
                                 institutions.append(author.institution_current)
-                            institution_names = [inst.name for inst in institutions]
-                            institution_ids = [inst.id for inst in institutions]
+                            institution_ids = [inst.id for inst in institutions if inst.id is not None]
 
-                            return author_matches_query_inner(institution_names,institution_ids,author.preferred_name.surname, author.id)(query.dict()['__root__'])
+                            return author_matches_query_inner(institution_ids,author.preferred_name.surname, author.id)(query.dict()['__root__'])
 
                         new_author = add_institutions_to_author(author, query_institutions)
                         full_query = AuthorSearchQuery.parse_obj({
@@ -310,6 +306,23 @@ class AuthorSearchQueryEngine(
             else:
                 results = await self.scopus_paper_search.get_data_from_native_query(native_paper_query)
                 new_results = await get_unique_authors(query, results)
+                if follow_up_necessary:
+                    author_ids = [author.id for author in new_results if author.id is not None]
+                    binned_author_ids = bin_items(author_ids, 25)
+                    new_results = []
+                    for id_set in binned_author_ids:
+                        query_dict = {
+                            'tag': 'or',
+                            'fields_': [{
+                                'tag': 'authorid',
+                                'operator': {
+                                    'tag': 'equal',
+                                    'value': auth_id
+                                }
+                            } for auth_id in id_set]
+                        }
+                        new_results += await self.scopus_author_search(AuthorSearchQuery.parse_obj(query_dict))
+
             return new_results
         return make_coroutine, metadata
 

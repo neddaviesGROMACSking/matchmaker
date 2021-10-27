@@ -28,7 +28,7 @@ d = {
 
 pq = ScopusAuthorSearchQuery.parse_obj(d)
 async def main():
-    cache_rem = get_author_query_remaining_in_cache()
+    cache_rem = await get_author_query_remaining_in_cache()
     print(cache_rem)
     results_length = await get_author_query_no_requests(pq, None, scopus_api_key, scopus_inst_token)
     cache_rem = await get_author_query_remaining_in_cache()

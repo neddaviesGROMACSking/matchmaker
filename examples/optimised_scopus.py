@@ -48,23 +48,16 @@ author_search = AuthorSearchQuery.parse_obj({
             }
         },
         {
-            'tag': 'author',
-            'operator': {
-                'tag': 'equal',
-                'value': 'Green'
-            }
-        },
-        {
             'tag': 'year',
             'operator': {
                 'tag': 'range',
-                'lower_bound': '2009',
-                'upper_bound': '2012'
+                'lower_bound': '2018',
+                'upper_bound': '2022'
             }
         }
     ]
 })
-
+# 799 requests to scopus search
 op_scopus_query_engine = op_scopus_backend.paper_search_engine()
 op_scopus_author_engine = op_scopus_backend.author_search_engine()
 async def main():
