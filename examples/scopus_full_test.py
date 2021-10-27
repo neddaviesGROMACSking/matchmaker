@@ -6,24 +6,26 @@ import asyncio
 import time
 from secret import scopus_api_key, scopus_inst_token
 d = {
-    'tag': 'and',
-    'fields_': [
-        {
-            'tag': 'author',
-            'operator': {
-                'tag': 'equal',
-                'value': 'Jeremy Green'
+    'query':{
+        'tag': 'and',
+        'fields_': [
+            {
+                'tag': 'author',
+                'operator': {
+                    'tag': 'equal',
+                    'value': 'Jeremy Green'
+                }
+            },
+            {
+                'tag': 'year',
+                'operator': {
+                    'tag': 'range',
+                    'lower_bound': '2001',
+                    'upper_bound': '2012'
+                }
             }
-        },
-        {
-            'tag': 'year',
-            'operator': {
-                'tag': 'range',
-                'lower_bound': '2001',
-                'upper_bound': '2012'
-            }
-        }
-    ]
+        ]
+    }
 }
 
 rate_limiter = RateLimiter()

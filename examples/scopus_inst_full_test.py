@@ -6,10 +6,12 @@ import asyncio
 import time
 from secret import scopus_api_key, scopus_inst_token
 d = {
-    'tag': 'institution',
-    'operator': {
-        'tag': 'equal',
-        'value': 'Queen Marys College'
+    'query':{
+        'tag': 'institution',
+        'operator': {
+            'tag': 'equal',
+            'value': 'Queen Marys College'
+        }
     }
 }
 

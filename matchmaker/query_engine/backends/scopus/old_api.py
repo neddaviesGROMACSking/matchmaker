@@ -9,7 +9,7 @@ from matchmaker.query_engine.backend import Backend
 
 from urllib.parse import quote_plus
 import xml.etree.ElementTree as xml_parse
-import requests
+import requests # type: ignore
 import json
 from enum import Enum
 

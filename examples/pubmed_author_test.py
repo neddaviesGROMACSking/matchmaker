@@ -8,16 +8,18 @@ import time
 from secret import pubmed_api_key
 import aiohttp
 d = {
-    'tag': 'and',
-    'fields_': [
-        {
-            'tag': 'author',
-            'operator': {
-                'tag': 'equal',
-                'value': 'Jeremy Green'
+    'query':{
+        'tag': 'and',
+        'fields_': [
+            {
+                'tag': 'author',
+                'operator': {
+                    'tag': 'equal',
+                    'value': 'Jeremy Green'
+                }
             }
-        }
-    ]
+        ]
+    }
 }
 
 rate_limiter = RateLimiter()

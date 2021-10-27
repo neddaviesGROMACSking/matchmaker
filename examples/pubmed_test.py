@@ -8,24 +8,26 @@ import time
 from secret import pubmed_api_key
 import aiohttp
 d = {
-    'tag': 'and',
-    'fields_': [
-        {
-            'tag': 'author',
-            'operator': {
-                'tag': 'equal',
-                'value': 'Jeremy Green'
+    'query':{
+        'tag': 'and',
+        'fields_': [
+            {
+                'tag': 'author',
+                'operator': {
+                    'tag': 'equal',
+                    'value': 'Jeremy Green'
+                }
+            },
+            {
+                'tag': 'year',
+                'operator': {
+                    'tag': 'range',
+                    'lower_bound': '2001',
+                    'upper_bound': '2012'
+                }
             }
-        },
-        {
-            'tag': 'year',
-            'operator': {
-                'tag': 'range',
-                'lower_bound': '2001',
-                'upper_bound': '2012'
-            }
-        }
-    ]
+        ]
+    }
 }
 
 rate_limiter = RateLimiter()

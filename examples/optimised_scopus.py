@@ -17,51 +17,62 @@ op_scopus_backend = OptimisedScopusBackend(
 
 
 paper_search = PaperSearchQuery.parse_obj({
-    'tag': 'and',
-    'fields_': [
-        {
-            'tag': 'author',
-            'operator': {
-                'tag': 'equal',
-                'value': 'Jeremy Green'
+    'query':{
+        'tag': 'and',
+        'fields_': [
+            {
+                'tag': 'author',
+                'operator': {
+                    'tag': 'equal',
+                    'value': 'Jeremy Green'
+                }
+            },
+            {
+                'tag': 'year',
+                'operator': {
+                    'tag': 'range',
+                    'lower_bound': '2001',
+                    'upper_bound': '2012'
+                }
             }
-        },
-        {
-            'tag': 'year',
-            'operator': {
-                'tag': 'range',
-                'lower_bound': '2001',
-                'upper_bound': '2012'
-            }
-        }
-    ]
+        ]
+    }
 })
 
 author_search = AuthorSearchQuery.parse_obj({
-    'tag': 'and',
-    'fields_': [
-        {
-            'tag': 'institution',
-            'operator': {
-                'tag': 'equal',
-                'value': 'Kings College'
+    'query':{
+        'tag': 'and',
+        'fields_': [
+            {
+                'tag': 'institution',
+                'operator': {
+                    'tag': 'equal',
+                    'value': 'Kings College'
+                }
+            },
+            {
+                'tag': 'author',
+                'operator': {
+                    'tag': 'equal',
+                    'value': 'Green'
+                }
+            },
+            {
+                'tag': 'year',
+                'operator': {
+                    'tag': 'range',
+                    'lower_bound': '2018',
+                    'upper_bound': '2021'
+                }
             }
-        },
-        {
-            'tag': 'year',
-            'operator': {
-                'tag': 'range',
-                'lower_bound': '2018',
-                'upper_bound': '2022'
-            }
-        }
-    ]
+        ]
+    }
 })
-# 799 requests to scopus search
+
 op_scopus_query_engine = op_scopus_backend.paper_search_engine()
 op_scopus_author_engine = op_scopus_backend.author_search_engine()
 async def main():
-    #return await op_scopus_query_engine(paper_search)
+    await op_scopus_query_engine(paper_search)
     return await op_scopus_author_engine(author_search)
 
 res = asyncio.run(main())

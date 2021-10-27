@@ -48,16 +48,18 @@ async def get_doi_list_from_data(papers: List[PaperData]) -> List[str]:
 
 async def get_doi_query_from_list(dois: List[str]) -> PaperSearchQuery:
     query = {
-        'tag': 'or',
-        'fields_': [
-            {
-                'tag': 'doi',
-                'operator': {
-                    'tag': 'equal',
-                    'value': i
-                }
-            } for i in dois
-        ]
+        'query':{
+            'tag': 'or',
+            'fields_': [
+                {
+                    'tag': 'doi',
+                    'operator': {
+                        'tag': 'equal',
+                        'value': i
+                    }
+                } for i in dois
+            ]
+        }
     }
     return PaperSearchQuery.parse_obj(query)
 
@@ -173,13 +175,13 @@ class AuthorSearchQueryEngine(
                         institutions =[]
                         def store_institution_callback(dict_structure):
                             institutions.append(dict_structure)
-                        execute_callback_on_tag(query.dict()['__root__'], 'institution', store_institution_callback)
-                        execute_callback_on_tag(query.dict()['__root__'], 'institutionid', store_institution_callback)
+                        execute_callback_on_tag(query.dict()['query'], 'institution', store_institution_callback)
+                        execute_callback_on_tag(query.dict()['query'], 'institutionid', store_institution_callback)
 
                         inst_mapper = []
                         all_insts = []
                         for institution in institutions:
-                            return_insts = await self.scopus_institution_search(InstitutionSearchQuery.parse_obj(institution))
+                            return_insts = await self.scopus_institution_search(InstitutionSearchQuery.parse_obj({'query': institution}))
                             inst_mapper.append((institution, return_insts))
                             all_insts += return_insts
                         return all_insts, inst_mapper
@@ -274,12 +276,14 @@ class AuthorSearchQueryEngine(
                                 institutions.append(author.institution_current)
                             institution_ids = [inst.id for inst in institutions if inst.id is not None]
 
-                            return author_matches_query_inner(institution_ids,author.preferred_name.surname, author.id)(query.dict()['__root__'])
+                            return author_matches_query_inner(institution_ids,author.preferred_name.surname, author.id)(query.dict()['query'])
 
                         new_author = add_institutions_to_author(author, query_institutions)
                         full_query = AuthorSearchQuery.parse_obj({
-                            'tag': 'or',
-                            'fields_': [query.dict()['__root__']]
+                            'query': {
+                                'tag': 'or',
+                                'fields_': [query.dict()['query']]
+                            }
                         })
                         match = author_matches_query(full_query, new_author)
                         if match:
@@ -312,14 +316,16 @@ class AuthorSearchQueryEngine(
                     new_results = []
                     for id_set in binned_author_ids:
                         query_dict = {
-                            'tag': 'or',
-                            'fields_': [{
-                                'tag': 'authorid',
-                                'operator': {
-                                    'tag': 'equal',
-                                    'value': auth_id
-                                }
-                            } for auth_id in id_set]
+                            'query': {
+                                'tag': 'or',
+                                'fields_': [{
+                                    'tag': 'authorid',
+                                    'operator': {
+                                        'tag': 'equal',
+                                        'value': auth_id
+                                    }
+                                } for auth_id in id_set]
+                            }
                         }
                         new_results += await self.scopus_author_search(AuthorSearchQuery.parse_obj(query_dict))
 

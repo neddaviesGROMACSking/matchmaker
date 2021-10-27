@@ -3,37 +3,41 @@ from matchmaker.query_engine.backends.pubmed import PubmedBackend
 from secret import pubmed_api_key
 import asyncio
 author_search = AuthorSearchQuery.parse_obj({
-    'tag': 'and',
-    'fields_': [
-        {
-            'tag': 'author',
-            'operator': {
-                'tag': 'equal',
-                'value': 'Jeremy Green'
+    'query':{
+        'tag': 'and',
+        'fields_': [
+            {
+                'tag': 'author',
+                'operator': {
+                    'tag': 'equal',
+                    'value': 'Jeremy Green'
+                }
             }
-        }
-    ]
+        ]
+    }
 })
 
 paper_search = PaperSearchQuery.parse_obj({
-    'tag': 'and',
-    'fields_': [
-        {
-            'tag': 'author',
-            'operator': {
-                'tag': 'equal',
-                'value': 'Jeremy Green'
+    'query':{
+        'tag': 'and',
+        'fields_': [
+            {
+                'tag': 'author',
+                'operator': {
+                    'tag': 'equal',
+                    'value': 'Jeremy Green'
+                }
+            },
+            {
+                'tag': 'year',
+                'operator': {
+                    'tag': 'range',
+                    'lower_bound': '2001',
+                    'upper_bound': '2012'
+                }
             }
-        },
-        {
-            'tag': 'year',
-            'operator': {
-                'tag': 'range',
-                'lower_bound': '2001',
-                'upper_bound': '2012'
-            }
-        }
-    ]
+        ]
+    }
 })
 pubmed_backend = PubmedBackend(api_key=pubmed_api_key)
 async def main():

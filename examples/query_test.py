@@ -1,16 +1,18 @@
 from matchmaker.query_engine.query_types import PaperSearchQuery
 
 d = {
-    'tag': 'and',
-    'fields_': [
-        {
-            'tag': 'year',
-            'operator': {
-                'tag': 'equal',
-                'value': 1996
+    'query':{
+        'tag': 'and',
+        'fields_': [
+            {
+                'tag': 'year',
+                'operator': {
+                    'tag': 'equal',
+                    'value': 1996
+                }
             }
-        }
-    ]
+        ]
+    }
 }
 
 print(PaperSearchQuery)

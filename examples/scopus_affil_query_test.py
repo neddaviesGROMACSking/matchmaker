@@ -7,10 +7,12 @@ from matchmaker.query_engine.backends.scopus.api import (
 import asyncio
 from secret import scopus_api_key, scopus_inst_token
 d = {
-    'tag': 'affiliation',
-    'operator': {
-        'tag': 'equal',
-        'value': "Scotland"
+    'query':{
+        'tag': 'affiliation',
+        'operator': {
+            'tag': 'equal',
+            'value': "Scotland"
+        }
     }
 }
 

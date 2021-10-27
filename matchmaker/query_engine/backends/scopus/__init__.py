@@ -45,7 +45,7 @@ class NotEnoughRequests(Exception):
     pass
 
 def paper_query_to_scopus(query: PaperSearchQuery) -> ScopusSearchQuery:
-    query_dict = query.dict()['__root__']
+    query_dict = query.dict()['query']
     new_query_dict = replace_dict_tags(
         query_dict,
         auth = 'author',
@@ -94,7 +94,7 @@ def author_query_to_scopus_author(query: AuthorSearchQuery) -> ScopusAuthorSearc
 
         return new_dict_structure
     
-    query_dict = query.dict()['__root__']
+    query_dict = query.dict()['query']
 
 
 
@@ -110,7 +110,7 @@ def author_query_to_scopus_author(query: AuthorSearchQuery) -> ScopusAuthorSearc
     return ScopusAuthorSearchQuery.parse_obj(new_query_dict)
 
 def institution_query_to_affiliation(query: InstitutionSearchQuery) -> AffiliationSearchQuery:
-    query_dict = query.dict()['__root__']
+    query_dict = query.dict()['query']
     new_query_dict = replace_dict_tags(
         query_dict,
         affiliation = 'institution',

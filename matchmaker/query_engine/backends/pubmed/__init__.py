@@ -99,7 +99,7 @@ def paper_query_to_esearch(query: PaperSearchQuery):
     # convert id.pubmed to pmid
     # convert id.doi to elocation
     #new_query_dict = replace_ids(query.dict()['__root__'])
-    new_query_dict = query.dict()['__root__']
+    new_query_dict = query.dict()['query']
     new_query_dict = replace_dict_tags(
         new_query_dict,
         elocationid = 'doi'
@@ -112,7 +112,7 @@ def author_query_to_esearch(query: AuthorSearchQuery):
     # TODO convert topic to elocation
     # convert id.pubmed to pmid
     # convert id.doi to elocation
-    return PubmedESearchQuery.parse_obj(query.dict()['__root__'])
+    return PubmedESearchQuery.parse_obj(query.dict()['query'])
 
 async def process_paper_institutions(i):
     async def process_authors(authors):
@@ -428,7 +428,7 @@ class AuthorSearchQueryEngine(
     ]:
         async def make_coroutine(client: ClientSession) -> List[PubmedNativeData]:
             pubmed_paper_query = author_query_to_esearch(query)
-            output = await esearch_on_query(query, client, api_key=self.api_key)
+            output = await esearch_on_query(pubmed_paper_query, client, api_key=self.api_key)
             id_list = output.pubmed_id_list
             output = await efetch_on_id_list(PubmedEFetchQuery(pubmed_id_list = id_list), client, api_key = self.api_key)
 
@@ -522,7 +522,6 @@ class AuthorSearchQueryEngine(
             else:
                 return False
         def group_by_location(filtered_authors):
-            set_list = []
             final_list = []
             for i in filtered_authors:
                 match_authors = []
@@ -551,18 +550,16 @@ class AuthorSearchQueryEngine(
         
         results = await gather(*coroutines)
 
-        authors = [i.author_list for i in results]
         combined_authors = []
         for result in results:
             combined_authors += result.author_list
 
-        query_dict = query.dict()['__root__']
+        query_dict = query.dict()['query']
 
         filtered_authors = []
         for i in combined_authors:
             author = i.__root__
             institution = author.institution
-            proc_institution = author.proc_institution
             if isinstance(author, ProcessedIndividual):
                 last_name = author.last_name
                 fore_name = author.fore_name

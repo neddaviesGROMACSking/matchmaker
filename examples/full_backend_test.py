@@ -4,44 +4,50 @@ from matchmaker.query_engine.backends.scopus import ScopusBackend
 from secret import pubmed_api_key, scopus_api_key, scopus_inst_token
 import asyncio
 author_search = AuthorSearchQuery.parse_obj({
-    'tag': 'and',
-    'fields_': [
-        {
-            'tag': 'author',
-            'operator': {
-                'tag': 'equal',
-                'value': 'Jeremy Green'
+    'query':{
+        'tag': 'and',
+        'fields_': [
+            {
+                'tag': 'author',
+                'operator': {
+                    'tag': 'equal',
+                    'value': 'Jeremy Green'
+                }
             }
-        }
-    ]
+        ]
+    }
 })
 
 paper_search = PaperSearchQuery.parse_obj({
-    'tag': 'and',
-    'fields_': [
-        {
-            'tag': 'author',
-            'operator': {
-                'tag': 'equal',
-                'value': 'Jeremy Green'
+    'query':{
+        'tag': 'and',
+        'fields_': [
+            {
+                'tag': 'author',
+                'operator': {
+                    'tag': 'equal',
+                    'value': 'Jeremy Green'
+                }
+            },
+            {
+                'tag': 'year',
+                'operator': {
+                    'tag': 'range',
+                    'lower_bound': '2001',
+                    'upper_bound': '2012'
+                }
             }
-        },
-        {
-            'tag': 'year',
-            'operator': {
-                'tag': 'range',
-                'lower_bound': '2001',
-                'upper_bound': '2012'
-            }
-        }
-    ]
+        ]
+    }
 })
 
 inst_search = InstitutionSearchQuery.parse_obj({
-    'tag': 'institution',
-    'operator': {
-        'tag': 'equal',
-        'value': "Scotland"
+    'query': {
+        'tag': 'institution',
+        'operator': {
+            'tag': 'equal',
+            'value': "Scotland"
+        }
     }
 })
 

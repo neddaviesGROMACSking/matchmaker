@@ -2,16 +2,18 @@ from matchmaker.query_engine.backends.scopus.api import ScopusSearchQuery, get_s
 import asyncio
 from secret import scopus_api_key, scopus_inst_token
 d = {
-    'tag': 'and',
-    'fields_': [
-        {
-            'tag': 'year',
-            'operator': {
-                'tag': 'equal',
-                'value': 1996
+    'query':{
+        'tag': 'and',
+        'fields_': [
+            {
+                'tag': 'year',
+                'operator': {
+                    'tag': 'equal',
+                    'value': 1996
+                }
             }
-        }
-    ]
+        ]
+    }
 }
 
 d = {

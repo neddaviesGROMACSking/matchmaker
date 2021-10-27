@@ -7,23 +7,25 @@ import time
 from secret import scopus_api_key, scopus_inst_token
 
 d = {
-    'tag': 'or',
-    'fields_': [
-        {
-            'tag': 'author',
-            'operator': {
-                'tag': 'equal',
-                'value': 'Jeremy Green'
+    'query':{
+        'tag': 'or',
+        'fields_': [
+            {
+                'tag': 'author',
+                'operator': {
+                    'tag': 'equal',
+                    'value': 'Jeremy Green'
+                }
+            },
+            {
+                'tag': 'author',
+                'operator': {
+                    'tag': 'equal',
+                    'value': 'Ian Rowlands'
+                }
             }
-        },
-        {
-            'tag': 'author',
-            'operator': {
-                'tag': 'equal',
-                'value': 'Ian Rowlands'
-            }
-        }
-    ]
+        ]
+    }
 }
 rate_limiter = RateLimiter()
 

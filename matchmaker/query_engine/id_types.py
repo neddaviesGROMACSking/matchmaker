@@ -1,3 +1,4 @@
+from examples.selector_trial import Selector
 from pydantic import BaseModel, root_validator
 from typing import Optional, Literal, List, Tuple
 from enum import Enum
@@ -18,16 +19,10 @@ class PaperID(BaseModel):
             raise ValueError('No ids selected')
         return values
 
-class IdTypeEnum(Enum):
-    doi = 'doi'
-    pubmed_id = 'pubmed_id'
-    scopus_id = 'scopus_id'
-
-class IdQuery(BaseModel):
-    tag: Literal['id'] = 'id'
-    id_value: str
-    id_type: IdTypeEnum
-
+class PaperIDSelector(BaseModel):
+    doi: bool = False
+    pubmed_id: bool = False
+    scopus_id: bool = False
 
 class PubmedId(BaseModel):
     author_name: str

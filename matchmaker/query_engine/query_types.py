@@ -1,9 +1,15 @@
-from pydantic import BaseModel, Field
-from pydantic.generics import GenericModel
-from typing import Annotated, Generic, List, Literal, Type, TypeVar, Union
 from collections.abc import Container
 from numbers import Real
-from matchmaker.query_engine.id_types import IdQuery
+from typing import Annotated, Generic, List, Literal, Type, TypeVar, Union
+
+from matchmaker.query_engine.id_types import PaperID
+from matchmaker.query_engine.selector_types import (
+    AuthorDataSelector,
+    InstitutionDataSelector,
+    PaperDataSelector,
+)
+from pydantic import BaseModel, Field
+from pydantic.generics import GenericModel
 QueryType = TypeVar('QueryType')  # TODO: restrict to query types only
 
 
@@ -110,19 +116,23 @@ class Topic(BaseModel):
     tag: Literal['topic'] = 'topic'
     operator: StringPredicate
 
+class PaperIDHigh(BaseModel):
+    tag: Literal['id'] = 'id'
+    operator: EqualPredicate[PaperID]
+
 class Doi(BaseModel):
     tag: Literal['doi'] = 'doi'
     operator: StringPredicate
 
-and_int = And['PaperSearchQuery']
-or_int = Or['PaperSearchQuery']
+and_int = And['PaperSearchQueryInner']
+or_int = Or['PaperSearchQueryInner']
 
-class PaperSearchQuery(BaseModel):
+class PaperSearchQueryInner(BaseModel):
     __root__: Annotated[
     Union[
         and_int,
         or_int,
-        IdQuery,
+        PaperIDHigh,
         Doi,
         Title,
         AuthorName,
@@ -137,14 +147,16 @@ class PaperSearchQuery(BaseModel):
 
 and_int.update_forward_refs()
 or_int.update_forward_refs()
-PaperSearchQuery.update_forward_refs()
+PaperSearchQueryInner.update_forward_refs()
 
+class PaperSearchQuery(BaseModel):
+    query: PaperSearchQueryInner
+    selector: Union[bool, PaperDataSelector] = True
 
+and_int = And['AuthorSearchQueryInner']
+or_int = Or['AuthorSearchQueryInner']
 
-and_int = And['PaperSearchQuery']
-or_int = Or['PaperSearchQuery']
-
-class AuthorSearchQuery(BaseModel):
+class AuthorSearchQueryInner(BaseModel):
     __root__: Annotated[  
     Union[
         and_int,  
@@ -161,9 +173,17 @@ class AuthorSearchQuery(BaseModel):
 
 and_int.update_forward_refs()
 or_int.update_forward_refs()
-AuthorSearchQuery.update_forward_refs()
+AuthorSearchQueryInner.update_forward_refs()
 
-class InstitutionSearchQuery(BaseModel):
+class AuthorSearchQuery(BaseModel):
+    query: AuthorSearchQueryInner
+    selector: Union[bool, AuthorDataSelector] = True
+
+
+and_int = And['InstitutionSearchQueryInner']
+or_int = Or['InstitutionSearchQueryInner']
+
+class InstitutionSearchQueryInner(BaseModel):
     __root__: Annotated[
     Union[
         and_int,  
@@ -172,3 +192,11 @@ class InstitutionSearchQuery(BaseModel):
         InstitutionID
     ],
     Field(discriminator='tag')]
+    
+and_int.update_forward_refs()
+or_int.update_forward_refs()
+InstitutionSearchQueryInner.update_forward_refs()
+
+class InstitutionSearchQuery(BaseModel):
+    query: InstitutionSearchQueryInner
+    selector: Union[bool, InstitutionDataSelector] = True

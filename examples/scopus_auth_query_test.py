@@ -7,23 +7,25 @@ from matchmaker.query_engine.backends.scopus.api import (
 import asyncio
 from secret import scopus_api_key, scopus_inst_token
 d = {
-    'tag': 'and',
-    'fields_': [
-        {
-            'tag': 'authfirst',
-            'operator': {
-                'tag': 'equal',
-                'value': 'Jeremy'
-            }
-        },
-        {
-            'tag': 'authlast',
-            'operator': {
-                'tag': 'equal',
-                'value': 'Smith'
+    'query':{
+        'tag': 'and',
+        'fields_': [
+            {
+                'tag': 'authfirst',
+                'operator': {
+                    'tag': 'equal',
+                    'value': 'Jeremy'
+                }
             },
-        }
-    ]
+            {
+                'tag': 'authlast',
+                'operator': {
+                    'tag': 'equal',
+                    'value': 'Smith'
+                },
+            }
+        ]
+    }
 }
 
 pq = ScopusAuthorSearchQuery.parse_obj(d)

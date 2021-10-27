@@ -179,6 +179,7 @@ async def esearch_on_query(
             return f'{prefix}esearch.fcgi?db={db}&retmax={retmax}&term={quote_plus(str(term))}'
         else:
             return f'{prefix}esearch.fcgi?db={db}&retmax={retmax}&term={quote_plus(str(term))}&api_key={api_key}'
+
     term = query_to_term(query.dict()['__root__'])
     search_url = make_search_given_term(term, api_key=api_key)
 
