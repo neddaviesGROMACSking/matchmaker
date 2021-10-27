@@ -2,14 +2,20 @@ from pydantic import BaseModel
 from typing import Union, List, Optional, Tuple, Dict
 from matchmaker.query_engine.id_types import PaperID
 
-class InstitutionData(BaseModel):
+class BaseInstitutionData(BaseModel):
+    pass
+
+class InstitutionData(BaseInstitutionData):
     name: Optional[str] = None
     id: Optional[str] = None
     processed: Optional[List[Tuple[str, str]]] = None
     paper_count: Optional[int] = None
     name_variants: Optional[List[str]] = None
 
-class AuthorData(BaseModel):
+class BaseAuthorData(BaseModel):
+    pass
+
+class AuthorData(BaseAuthorData):
     class Name(BaseModel):
         surname: str
         given_names: Optional[str] = None
@@ -43,8 +49,10 @@ class SubPaperData(BaseModel):
     keywords: Optional[List[str]] = None
     topics: Optional[List[Topic]] = None
 
+class BasePaperData(BaseModel):
+    pass
 
-class PaperData(SubPaperData):
+class PaperData(SubPaperData, BasePaperData):
     references: Optional[Union[int, List[SubPaperData]]] = None
     cited_by: Optional[Union[int, List[SubPaperData]]] = None
 

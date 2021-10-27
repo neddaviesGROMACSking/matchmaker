@@ -1,8 +1,17 @@
 from typing import Union
-from pydantic import BaseModel, PrivateAttr
-from typing import Union, List, Optional, Tuple, Dict, Any, TypeVar, Generic
+from typing import Any, Dict, Generic, List, Optional, Tuple, TypeVar, Union
+from typing_extensions import get_args, get_origin
+from matchmaker.query_engine.data_types import (
+    AuthorData,
+    BaseAuthorData,
+    BaseInstitutionData,
+    BasePaperData,
+    InstitutionData,
+    PaperData,
+)
 from matchmaker.query_engine.id_types import PaperID, PaperIDSelector
-
+from pydantic import BaseModel, create_model
+from copy import copy
 SelectorDict = Dict[str, Union[bool, 'SelectorDict']]
 Selector = TypeVar('Selector', bound = BaseModel)
 
@@ -50,6 +59,47 @@ class BaseSelector(Generic[Selector], BaseModel):
         item_dict = item.dict()
 
         return s_dict1_in_s_dict2(item_dict, self_dict)
+    def generate_model(self, base_model: BaseModel, full_model: BaseModel) -> BaseModel:
+        fields = full_model.__fields__
+        selector_dict = self.dict()
+        def make_model(model_name, selector_dict, base, fields):
+            ellipsis_type = type(...)
+            new_attrs: Dict[str, Tuple[type,Union[type, ellipsis_type]]] = {}
+            for name, selector_value in selector_dict.items():
+                if isinstance(selector_value, bool):
+                    if selector_value:
+                        model_field = fields[name]
+                        field_type = model_field.outer_type_
+                        if model_field.required:
+                            field_default = ...
+                        else:
+                            field_default = model_field.default
+                        new_attrs[name] = (field_type, field_default)
+                elif isinstance(selector_value, dict):
+                    model_field = fields[name]
+                    sub_model_fields = model_field.type_.__fields__
+                    base_model = model_field.type_.mro()[1] # TODO Find a better way to obtain - need super class
+                    sub_model_name = model_field.type_.__name__
+                    if model_field.required:
+                        field_default = ...
+                    else:
+                        field_default = model_field.default
+
+                    sub_model = make_model(sub_model_name, selector_value, base_model, sub_model_fields)
+                    type_origin = get_origin(model_field.outer_type_)
+                    if type_origin is None:
+                        new_field_type = sub_model
+                    else:
+                        new_field_type = type_origin[sub_model]
+                    new_attrs[name] = (new_field_type, field_default)
+                else:
+                    raise TypeError('Unsupported type in selector')
+            return create_model(model_name, **new_attrs, __base__ = base)
+        
+        model = make_model('PaperData', selector_dict, base_model, fields)
+        return model
+
+
 
 class InstitutionDataSelector(BaseSelector['InstitutionDataSelector']):
     name: bool = False
@@ -57,6 +107,9 @@ class InstitutionDataSelector(BaseSelector['InstitutionDataSelector']):
     processed: bool = False
     paper_count: bool = False
     name_variants: bool = False
+
+    def generate_model(self) -> BaseInstitutionData:
+        return super().generate_model(BaseInstitutionData, InstitutionData)
 
 class AuthorDataSelector(BaseSelector['AuthorDataSelector']):
     class NameSelector(BaseModel):
@@ -74,6 +127,9 @@ class AuthorDataSelector(BaseSelector['AuthorDataSelector']):
     other_institutions: Union[bool, InstitutionDataSelector] = False
     paper_count: bool = False
     paper_ids: Union[bool, PaperIDSelector] = False
+
+    def generate_model(self) -> BaseAuthorData:
+        return super().generate_model(BaseAuthorData, AuthorData)
 
 class TopicSelector(BaseModel):
     descriptor: bool = False
@@ -93,6 +149,8 @@ class SubPaperDataSelector(BaseModel):
     topics: Union[bool, TopicSelector] = False
 
 class PaperDataSelector(SubPaperDataSelector, BaseSelector['PaperDataSelector']):
-    references: Union[bool, SubPaperDataSelector] = True
-    cited_by: Union[bool, SubPaperDataSelector] = True
+    references: Union[bool, SubPaperDataSelector] = False
+    cited_by: Union[bool, SubPaperDataSelector] = False
 
+    def generate_model(self) -> BasePaperData:
+        return super().generate_model(BasePaperData, PaperData)

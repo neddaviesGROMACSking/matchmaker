@@ -32,7 +32,7 @@ from matchmaker.query_engine.backends.pubmed.processors import (
     ProcessedIndividual,
     process_institution,
 )
-from matchmaker.query_engine.data_types import AuthorData, PaperData
+from matchmaker.query_engine.data_types import AuthorData, BasePaperData, PaperData
 from matchmaker.query_engine.query_types import AuthorSearchQuery, PaperSearchQuery
 from matchmaker.query_engine.query_types import (
     Abstract,
@@ -182,7 +182,13 @@ class PaperSearchQueryEngine(
             'elink': 2
         }
         pubmed_search_query = paper_query_to_esearch(query)
-        
+        if isinstance(query.selector, bool):
+            if query.selector:
+                return_model = PaperData
+            else:
+                return_model = BasePaperData
+        else:
+            return_model = query.selector.generate_model()
         async def make_coroutine(client: ClientSession) -> List[PubmedNativeData]:
             async def esearch_on_query_set_future(id_list_future, query, client):
 

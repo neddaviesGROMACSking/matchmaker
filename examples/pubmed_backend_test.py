@@ -37,6 +37,17 @@ paper_search = PaperSearchQuery.parse_obj({
                 }
             }
         ]
+    },
+    'selector': {
+        'title': True,
+        'paper_id': {
+            'doi': True
+        },
+        'source_title_id': True,
+        'authors': {'id': True},
+        'topics': {
+            'qualifier': True
+        }
     }
 })
 pubmed_backend = PubmedBackend(api_key=pubmed_api_key)
