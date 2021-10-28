@@ -1,17 +1,9 @@
 from typing import Union
 from typing import Any, Dict, Generic, List, Optional, Tuple, TypeVar, Union
-from typing_extensions import get_args, get_origin
-from matchmaker.query_engine.data_types import (
-    AuthorData,
-    BaseAuthorData,
-    BaseInstitutionData,
-    BasePaperData,
-    InstitutionData,
-    PaperData,
-)
-from matchmaker.query_engine.id_types import PaperID, PaperIDSelector
+from typing_extensions import get_origin
+from matchmaker.query_engine.id_types import PaperIDSelector
 from pydantic import BaseModel, create_model
-from copy import copy
+
 SelectorDict = Dict[str, Union[bool, 'SelectorDict']]
 Selector = TypeVar('Selector', bound = BaseModel)
 
@@ -57,11 +49,9 @@ class BaseSelector(Generic[Selector], BaseModel):
             return True
         self_dict = self.dict()
         item_dict = item.dict()
-
         return s_dict1_in_s_dict2(item_dict, self_dict)
+
     def generate_model(self, base_model: BaseModel, full_model: BaseModel) -> BaseModel:
-        fields = full_model.__fields__
-        selector_dict = self.dict()
         def make_model(model_name, selector_dict, base, fields):
             ellipsis_type = type(...)
             new_attrs: Dict[str, Tuple[type,Union[type, ellipsis_type]]] = {}
@@ -96,7 +86,9 @@ class BaseSelector(Generic[Selector], BaseModel):
                     raise TypeError('Unsupported type in selector')
             return create_model(model_name, **new_attrs, __base__ = base)
         
-        model = make_model('PaperData', selector_dict, base_model, fields)
+        fields = full_model.__fields__
+        selector_dict = self.dict()
+        model = make_model(base_model.__name__, selector_dict, base_model, fields)
         return model
 
 
@@ -107,9 +99,6 @@ class InstitutionDataSelector(BaseSelector['InstitutionDataSelector']):
     processed: bool = False
     paper_count: bool = False
     name_variants: bool = False
-
-    def generate_model(self) -> BaseInstitutionData:
-        return super().generate_model(BaseInstitutionData, InstitutionData)
 
 class AuthorDataSelector(BaseSelector['AuthorDataSelector']):
     class NameSelector(BaseModel):
@@ -127,9 +116,6 @@ class AuthorDataSelector(BaseSelector['AuthorDataSelector']):
     other_institutions: Union[bool, InstitutionDataSelector] = False
     paper_count: bool = False
     paper_ids: Union[bool, PaperIDSelector] = False
-
-    def generate_model(self) -> BaseAuthorData:
-        return super().generate_model(BaseAuthorData, AuthorData)
 
 class TopicSelector(BaseModel):
     descriptor: bool = False
@@ -151,6 +137,3 @@ class SubPaperDataSelector(BaseModel):
 class PaperDataSelector(SubPaperDataSelector, BaseSelector['PaperDataSelector']):
     references: Union[bool, SubPaperDataSelector] = False
     cited_by: Union[bool, SubPaperDataSelector] = False
-
-    def generate_model(self) -> BasePaperData:
-        return super().generate_model(BasePaperData, PaperData)

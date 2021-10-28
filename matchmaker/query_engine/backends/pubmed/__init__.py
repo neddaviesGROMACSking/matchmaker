@@ -182,13 +182,9 @@ class PaperSearchQueryEngine(
             'elink': 2
         }
         pubmed_search_query = paper_query_to_esearch(query)
-        if isinstance(query.selector, bool):
-            if query.selector:
-                return_model = PaperData
-            else:
-                return_model = BasePaperData
-        else:
-            return_model = query.selector.generate_model()
+
+        new_paper_data = BasePaperData.generate_model_from_selector(query.selector).schema()
+        print(new_paper_data)
         async def make_coroutine(client: ClientSession) -> List[PubmedNativeData]:
             async def esearch_on_query_set_future(id_list_future, query, client):
 
