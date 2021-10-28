@@ -73,10 +73,10 @@ class BaseNativeQuery(Generic[NativeData], AbstractNativeQuery):
 Query = TypeVar('Query')
 Data = TypeVar('Data')
 
-ProcessedNativeData = TypeVar('ProcessedNativeData')
+
 class BaseBackendQueryEngine(
-    Generic[Query, NativeData, ProcessedNativeData, Data], 
-    SlightlyLessAbstractQueryEngine[Query, BaseNativeQuery[NativeData], NativeData, ProcessedNativeData, Data]
+    Generic[Query, NativeData, Data], 
+    SlightlyLessAbstractQueryEngine[Query, BaseNativeQuery[NativeData], NativeData, Data]
 ):
     def __init__(self, rate_limiter = RateLimiter(), *args, **kwargs):
         self.rate_limiter = rate_limiter
@@ -97,33 +97,31 @@ class BaseBackendQueryEngine(
             results = await query.coroutine_function(client)
         return results
     
-    async def _post_process(self, query: Query, data: NativeData) -> ProcessedNativeData:
+    async def _post_process(self, query: Query, data: NativeData) -> Data:
         raise NotImplementedError('Calling method on abstract base class')
 
-    async def _data_from_processed(self, data: ProcessedNativeData) -> Data:
-        raise NotImplementedError('Calling method on abstract base class')
     async def __call__(self, query: Query) -> Data:
         nd = await self._run_native_query(await self._query_to_native(query))
-        return await self._data_from_processed(await self._post_process(query, nd))
+        return await self._post_process(query, nd)
     
     #Put post process as no op
 
 
 class BasePaperSearchQueryEngine(
-    Generic[NativeData, ProcessedNativeData], 
-    BaseBackendQueryEngine[PaperSearchQuery, NativeData, ProcessedNativeData, PaperData]
+    Generic[NativeData], 
+    BaseBackendQueryEngine[PaperSearchQuery, NativeData, PaperData]
 ):
     pass
 
 
 class BaseAuthorSearchQueryEngine(
-    Generic[NativeData, ProcessedNativeData], 
-    BaseBackendQueryEngine[AuthorSearchQuery, NativeData, ProcessedNativeData, AuthorData]
+    Generic[NativeData], 
+    BaseBackendQueryEngine[AuthorSearchQuery, NativeData, AuthorData]
 ):
     pass
 
 class BaseInstitutionSearchQueryEngine(
-    Generic[NativeData, ProcessedNativeData], 
-    BaseBackendQueryEngine[InstitutionSearchQuery, NativeData, ProcessedNativeData, InstitutionData]
+    Generic[NativeData], 
+    BaseBackendQueryEngine[InstitutionSearchQuery, NativeData, InstitutionData]
 ):
     pass

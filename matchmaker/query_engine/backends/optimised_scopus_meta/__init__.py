@@ -67,7 +67,7 @@ async def get_dois_remaining(scopus_dois: List[str], pubmed_dois: List[str]) -> 
     return [doi for doi in scopus_dois if doi not in pubmed_dois]
 
 class PaperSearchQueryEngine(
-    SlightlyLessAbstractQueryEngine[PaperSearchQuery, BaseNativeQuery[List[PaperData]], List[PaperData], List[PaperData], List[PaperData]]):
+    SlightlyLessAbstractQueryEngine[PaperSearchQuery, BaseNativeQuery[List[PaperData]], List[PaperData], List[PaperData]]):
     def __init__(
         self, 
         scopus_paper_search,
@@ -135,11 +135,9 @@ class PaperSearchQueryEngine(
     async def _post_process(self, query: PaperSearchQuery, data: List[PaperData]) -> List[PaperData]:
         return data
 
-    async def _data_from_processed(self, data: List[PaperData]) -> List[PaperData]:
-        return data
 
 class AuthorSearchQueryEngine(
-    SlightlyLessAbstractQueryEngine[AuthorSearchQuery, BaseNativeQuery[List[AuthorData]], List[AuthorData], List[AuthorData], List[AuthorData]]):
+    SlightlyLessAbstractQueryEngine[AuthorSearchQuery, BaseNativeQuery[List[AuthorData]], List[AuthorData], List[AuthorData]]):
     def __init__(
         self,
         scopus_paper_search,
@@ -342,8 +340,6 @@ class AuthorSearchQueryEngine(
     async def _post_process(self, query: AuthorSearchQuery, data: List[AuthorData]) -> List[AuthorData]:
         return data
 
-    async def _data_from_processed(self, data: List[AuthorData]) -> List[AuthorData]:
-        return data
 
 class OptimisedScopusBackend(Backend):
     def __init__(

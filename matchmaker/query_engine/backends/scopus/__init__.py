@@ -121,7 +121,7 @@ def institution_query_to_affiliation(query: InstitutionSearchQuery) -> Affiliati
     return AffiliationSearchQuery.parse_obj(new_query_dict) 
 
 class PaperSearchQueryEngine(
-        BasePaperSearchQueryEngine[List[ScopusSearchResult], List[ProcessedScopusSearchResult]]):
+        BasePaperSearchQueryEngine[List[ScopusSearchResult]]):
     def __init__(self, api_key:str , institution_token: str, rate_limiter: RateLimiter = RateLimiter(max_requests_per_second = 9), full_view: bool = True, *args, **kwargs):
         self.api_key = api_key
         self.institution_token = institution_token
@@ -153,11 +153,7 @@ class PaperSearchQueryEngine(
             return await scopus_search_on_query(scopus_search_query, client, view, self.api_key, self.institution_token)
         return make_coroutine, metadata
     
-    async def _post_process(self, query: PaperSearchQuery, data: List[ScopusSearchResult]) -> List[ScopusSearchResult]:
-
-        return data
-
-    async def _data_from_processed(self, data: List[ScopusSearchResult]) -> List[PaperData]:
+    async def _post_process(self, query: PaperSearchQuery, data: List[ScopusSearchResult]) -> List[PaperData]:
         new_papers = []
         for i, paper in enumerate(data):
             new_paper_dict ={}
@@ -278,7 +274,7 @@ class PaperSearchQueryEngine(
 
 
 class AuthorSearchQueryEngine(
-    BaseAuthorSearchQueryEngine[List[ScopusAuthorSearchResult], List[AuthorData]]
+    BaseAuthorSearchQueryEngine[List[ScopusAuthorSearchResult]]
 ):
     def __init__(self, api_key:str , institution_token: str, rate_limiter: RateLimiter = RateLimiter(max_requests_per_second = 2), *args, **kwargs):
         self.api_key = api_key
@@ -350,14 +346,8 @@ class AuthorSearchQueryEngine(
         return new_papers
 
 
-    async def _data_from_processed(self, data: List[AuthorData]) -> List[AuthorData]:
-        return data
-
-
-
-
 class InstitutionSearchQueryEngine(
-    BaseInstitutionSearchQueryEngine[List[AffiliationSearchResult], List[InstitutionData]]
+    BaseInstitutionSearchQueryEngine[List[AffiliationSearchResult]]
 ):
     def __init__(self, api_key:str , institution_token: str, rate_limiter: RateLimiter = RateLimiter(max_requests_per_second = 6), *args, **kwargs):
         self.api_key = api_key
@@ -403,9 +393,6 @@ class InstitutionSearchQueryEngine(
             new_paper = InstitutionData.parse_obj(new_paper_dict)
             new_papers.append(new_paper)
         return new_papers
-    
-    async def _data_from_processed(self, data: List[InstitutionData]) -> List[InstitutionData]:
-        return data
 
 
 class ScopusBackend(Backend):

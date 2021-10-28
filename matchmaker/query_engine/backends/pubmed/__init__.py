@@ -162,7 +162,7 @@ async def process_paper_institutions(i):
 
 
 class PaperSearchQueryEngine(
-        BasePaperSearchQueryEngine[List[PubmedNativeData], List[ProcessedData]]):
+        BasePaperSearchQueryEngine[List[PubmedNativeData]]):
     api_key:str
     def __init__(self, api_key, rate_limiter: RateLimiter = RateLimiter(), *args, **kwargs):
         self.api_key = api_key
@@ -318,15 +318,7 @@ class PaperSearchQueryEngine(
 
         return make_coroutine, metadata
 
-    async def _post_process(self, query: PaperSearchQuery, data: List[PubmedNativeData]) -> List[ProcessedData]:
-        results = []
-        for i in data:
-            results.append(await process_paper_institutions(i))
-
-        return results
-
-
-    async def _data_from_processed(self, data: List[ProcessedData]) -> List[PaperData]:
+    async def _post_process(self, query: PaperSearchQuery, data: List[PubmedNativeData]) -> List[PaperData]:
         def convert_data_dict(data_dict):
             abstract = data_dict['abstract']
             if isinstance(abstract, list):
@@ -403,11 +395,11 @@ class PaperSearchQueryEngine(
                 'references': new_references,
                 'cited_by': new_cited_bys
             }
-        
 
         new_data = []
-        for i in data:
-            data_dict = i.dict()
+        for i in new_data:
+            processed = await process_paper_institutions(i)
+            data_dict = processed.dict()
             new_data_dict = convert_data_dict(data_dict)
             new_data.append(PaperData.parse_obj(new_data_dict))
             
@@ -415,7 +407,7 @@ class PaperSearchQueryEngine(
         #return [paper_from_native(datum) for datum in data]
 
 class AuthorSearchQueryEngine(
-        BaseAuthorSearchQueryEngine[List[PubmedNativeData], List[ProcessedAuthorData]]):
+        BaseAuthorSearchQueryEngine[List[PubmedNativeData]]):
         
     def __init__(self, api_key, rate_limiter: RateLimiter = RateLimiter(), *args, **kwargs):
         self.api_key = api_key
@@ -443,7 +435,7 @@ class AuthorSearchQueryEngine(
         return make_coroutine, metadata
 
 
-    async def _post_process(self, query: PaperSearchQuery, data: List[PubmedNativeData]) -> List[ProcessedAuthorData]:
+    async def _post_process(self, query: PaperSearchQuery, data: List[PubmedNativeData]) -> List[AuthorData]:
         def query_to_func(body_institution, body_author, body_topic):
             def query_to_term(query):
                 def make_string_term(body_string, q_value, operator):
@@ -597,12 +589,8 @@ class AuthorSearchQueryEngine(
                 )
             )
 
-        return processed_author_data
-
-    async def _data_from_processed(self, data: List[ProcessedAuthorData]) -> List[AuthorData]:
-
         new_data = []
-        for i in data:
+        for i in processed_author_data:
             data_dict = i.dict()
             author_info = data_dict['author']
             paper_count = data_dict['paper_count']
