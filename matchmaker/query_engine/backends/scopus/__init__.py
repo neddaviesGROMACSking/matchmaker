@@ -155,7 +155,6 @@ class PaperSearchQueryEngine(
     
     async def _post_process(self, query: PaperSearchQuery, data: List[ScopusSearchResult]) -> List[ScopusSearchResult]:
 
-        
         return data
 
     async def _data_from_processed(self, data: List[ScopusSearchResult]) -> List[PaperData]:
@@ -185,78 +184,52 @@ class PaperSearchQueryEngine(
             
             cover_date = paper_dict['coverDate']
             new_paper_dict['year'] = cover_date.split('-')[0]
-
-
-
-            afid = paper_dict['afid']
-            if afid is not None:
-                afids = afid.split(';')
-            else:
-                afids = afid
             
             affilname = paper_dict['affilname']
-            if affilname is not None:
-                affil_names = unescape(affilname).split(';')
-            else:
-                affil_names = affilname
 
-            if affil_names is not None:
+            if affilname is not None:
+                afid = paper_dict['afid']
+                if afid is not None:
+                    afids = afid.split(';')
+                else:
+                    afids = afid
+                affil_names = unescape(affilname).split(';')
                 affil_cities = unescape(paper_dict['affiliation_city']).split(';')
                 affil_countries = unescape(paper_dict['affiliation_country']).split(';')
                 affil_procs = []
 
-                if len(affil_cities) != len(affil_names):
-                    ignore_cities = True
-                else:
-                    ignore_cities = False
-                if len(affil_countries) != len(affil_names):
-                    ignore_countries = True
-                else:
-                    ignore_countries = False
                 for i, a_name in enumerate(affil_names):
                     affil_proc = []
                     affil_proc.append((a_name, 'house'))
-                    if not ignore_cities:
+                    if len(affil_cities) == len(affil_names):
                         affil_city = affil_cities[i]
                         affil_proc.append((affil_city, 'city'))
-                    if not ignore_countries:
+                    if len(affil_countries) == len(affil_names):
                         affil_country = affil_countries[i]
                         affil_proc.append((affil_country, 'country'))
                     affil_procs.append(affil_proc)
-            else:
-                affil_procs = []
 
-            if affil_names is not None:
                 new_institutions = []
-                if len(affil_names) != len(afids):
-                    ignore_afids = True
-                else:
-                    ignore_afids = False
-                if len(affil_names) != len(affil_procs):
-                    ignore_affil_procs = True
-                else:
-                    ignore_affil_procs = False
-
                 for m, affil_name in enumerate(affil_names):
                     new_institution = {}
-                    if not ignore_afids:
+                    if len(affil_names) == len(afids):
                         new_institution['id'] = afids[m]
-                    if not ignore_affil_procs:
+                    if len(affil_names) == len(affil_procs):
                         new_institution['processed'] = affil_procs[m]
                     new_institution['name'] = affil_name
                     new_institutions.append(new_institution)
             else:
                 new_institutions = None
             new_paper_dict['institutions'] = new_institutions
-    
-
 
 
             author_names = paper_dict['author_names']
             if author_names is not None:
                 if author_names[0] == '(':
-                    author_names = author_names[1:-1]
-                author_names = author_names.split(';')
+                    author_names = author_names[1:-1].split(';')
+                else:
+                    author_names = author_names.split(';')
+                
                 new_author_names = []
                 for author_name in author_names:
                     names = author_name.split(',')
@@ -270,39 +243,24 @@ class PaperSearchQueryEngine(
                         'given_names': given_names
                     }
                     new_author_names.append(new_author_name)
-            else:
-                new_author_names = None
-            
-            
-            author_afids = paper_dict['author_afids']
-            if author_afids is not None:
-                author_afids = author_afids.split(';')
-                author_afids = [i.split('-') for i in author_afids]
 
-            author_ids = paper_dict['author_ids']
-            if author_ids is not None:
-                author_ids = author_ids.split(';')
+                author_afids = paper_dict['author_afids']
+                if author_afids is not None:
+                    author_afids = [i.split('-') for i in author_afids.split(';')]
 
-            if author_ids is not None:
-                if len(new_author_names) != len(author_ids):
-                    ignore_auth_ids = True
-                else:
-                    ignore_auth_ids = False
-            if author_afids is not None:
-                if len(new_author_names) != len(author_afids):
-                    ignore_auth_afids = True
-                else:
-                    ignore_auth_afids = False
-            if new_author_names is not None:
+                author_ids = paper_dict['author_ids']
+                if author_ids is not None:
+                    author_ids = author_ids.split(';')
+                
+
                 new_authors = []
                 for j, author_name in enumerate(new_author_names):
-                    if author_ids is not None and not ignore_auth_ids:
+                    if author_ids is not None and (len(new_author_names) == len(author_ids)):
                         author_id = author_ids[j]
                     else:
                         author_id = None
-                    if author_afids is not None and not ignore_auth_afids:
-                        author_afid = author_afids[j]
-                        other_institutions = [{'id': k} for k in author_afid]
+                    if author_afids is not None and len(new_author_names) == len(author_afids):
+                        other_institutions = [{'id': k} for k in author_afids[j]]
                     else:
                         other_institutions = []
                     new_author = {
