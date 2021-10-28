@@ -50,19 +50,19 @@ author_search = AuthorSearchQuery.parse_obj({
                     'value': 'Kings College'
                 }
             },
-            {
-                'tag': 'author',
-                'operator': {
-                    'tag': 'equal',
-                    'value': 'Green'
-                }
-            },
+            #{
+            #    'tag': 'author',
+            #    'operator': {
+            #        'tag': 'equal',
+            #        'value': 'Green'
+            #    }
+            #},
             {
                 'tag': 'year',
                 'operator': {
                     'tag': 'range',
                     'lower_bound': '2018',
-                    'upper_bound': '2021'
+                    'upper_bound': '2022'
                 }
             }
         ]
@@ -72,10 +72,10 @@ author_search = AuthorSearchQuery.parse_obj({
 op_scopus_query_engine = op_scopus_backend.paper_search_engine()
 op_scopus_author_engine = op_scopus_backend.author_search_engine()
 async def main():
-    await op_scopus_query_engine(paper_search)
+    return await op_scopus_query_engine(paper_search)
     return await op_scopus_author_engine(author_search)
 
 res = asyncio.run(main())
-print(res)
+print(res[0])
 
 #print([res.paper_id.doi for res in res])

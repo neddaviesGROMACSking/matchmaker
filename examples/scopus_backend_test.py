@@ -41,7 +41,7 @@ paper_search = PaperSearchQuery.parse_obj({
 })
 inst_search = InstitutionSearchQuery.parse_obj({
     'query':{
-        'tag': 'affiliation',
+        'tag': 'institution',
         'operator': {
             'tag': 'equal',
             'value': "Scotland"
@@ -61,3 +61,4 @@ async def main():
     inst_results = await inst_searcher(inst_search)
     return paper_results
 paper_results = asyncio.run(main())
+print(paper_results[0:4])
