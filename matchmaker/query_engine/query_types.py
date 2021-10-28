@@ -7,8 +7,9 @@ from matchmaker.query_engine.selector_types import (
     AuthorDataSelector,
     InstitutionDataSelector,
     PaperDataSelector,
+    PaperDataAllSelected
 )
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, validator
 from pydantic.generics import GenericModel
 QueryType = TypeVar('QueryType')  # TODO: restrict to query types only
 
@@ -151,7 +152,15 @@ PaperSearchQueryInner.update_forward_refs()
 
 class PaperSearchQuery(BaseModel):
     query: PaperSearchQueryInner
-    selector: Union[bool, PaperDataSelector] = True
+    selector: PaperDataSelector = True #type:ignore
+    @validator('selector', pre=True, always = True)
+    def convert_to_selector(cls, v):
+        if v is True:
+            return PaperDataAllSelected
+        elif v is False:
+            return PaperDataSelector()
+        else:
+            return v
 
 and_int = And['AuthorSearchQueryInner']
 or_int = Or['AuthorSearchQueryInner']

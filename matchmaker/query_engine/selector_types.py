@@ -137,3 +137,19 @@ class SubPaperDataSelector(BaseModel):
 class PaperDataSelector(SubPaperDataSelector, BaseSelector['PaperDataSelector']):
     references: Union[bool, SubPaperDataSelector] = False
     cited_by: Union[bool, SubPaperDataSelector] = False
+
+PaperDataAllSelected = PaperDataSelector(
+    paper_id = True,
+    title = True,
+    authors = True,
+    year = True,
+    source_title = True,
+    source_title_id = True,
+    source_title_abr = True,
+    abstract = True,
+    institutions = True,
+    keywords = True,
+    topics = True,
+    references = True,
+    cited_by = True
+)
