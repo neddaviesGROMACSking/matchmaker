@@ -64,8 +64,6 @@ inst_search = InstitutionSearchQuery.parse_obj({
 
 
 async def main():
-
-
     paper_results = await paper_searcher(paper_search)
     author_results = await author_searcher(author_search)
     inst_results = await inst_searcher(inst_search)

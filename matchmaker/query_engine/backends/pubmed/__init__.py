@@ -53,6 +53,7 @@ from matchmaker.query_engine.backends.tools import (
     replace_dict_tags,
 )
 from matchmaker.query_engine.backends.exceptions import QueryNotSupportedError
+from matchmaker.query_engine.selector_types import PaperDataSelector
 # TODO Use generators to pass information threough all levels
 
 and_int = And['PubMedAuthorSearchQuery']
@@ -107,7 +108,7 @@ def paper_query_to_esearch(query: PaperSearchQuery):
     try:
         return PubmedESearchQuery.parse_obj(new_query_dict)
     except ValidationError as e:
-        raise QueryNotSupportedError(e.raw_errors, e.model)
+        raise QueryNotSupportedError(e.raw_errors)
 def author_query_to_esearch(query: AuthorSearchQuery):
     # TODO convert topic to elocation
     # convert id.pubmed to pmid
@@ -182,7 +183,48 @@ class PaperSearchQueryEngine(
             'elink': 2
         }
         pubmed_search_query = paper_query_to_esearch(query)
-
+        esearch_field_bools = {'paper_id':{'pubmed_id':True}}
+        efetch_field_bools = {
+            'paper_id': {
+                'pubmed_id': True,
+                'doi': True
+            },
+            'title': True,
+            'authors': {
+                'preferred_name': True,
+                'current_institution': {
+                    'name': True,
+                    'processed': True
+                }
+            },
+            'year': True,
+            'source_title': True,
+            'source_title_abr': True,
+            'abstract': True,
+            'keywords': True,
+            'topics': True
+        }
+        esearch_fields = PaperDataSelector.parse_obj(esearch_field_bools)
+        esearch_efetch_fields = PaperDataSelector.parse_obj(efetch_field_bools)
+        esearch_elink_refs_fields = PaperDataSelector.parse_obj({
+            **esearch_field_bools,
+            'references': esearch_field_bools
+        })
+        esearch_elink_citeds_fields = PaperDataSelector.parse_obj({
+            **esearch_field_bools,
+            'cited_by': esearch_field_bools
+        })
+        self.possible_searches = [
+            esearch_fields,
+            esearch_efetch_fields,
+            esearch_elink_refs_fields,
+            esearch_elink_citeds_fields
+        ]
+        self.available_fields = {
+            **efetch_field_bools,
+            'references': efetch_field_bools,
+            'cited_by': efetch_field_bools
+        }
         new_paper_data = BasePaperData.generate_model_from_selector(query.selector).schema()
         print(new_paper_data)
         async def make_coroutine(client: ClientSession) -> List[PubmedNativeData]:

@@ -97,6 +97,11 @@ class BaseSelector(Generic[Selector], BaseModel):
         model = make_model(base_model.__name__, selector_dict, base_model, fields)
         return model
 
+    def get_values_overselected(self, selector: Selector) -> List[str]:
+        # TODO produce fields selected in self and not in supplied selector
+        # Potentially make contain depend on this method, 
+        # returning True if it raises ValuesNotOverselected
+        raise NotImplementedError
 
 
 class InstitutionDataSelector(BaseSelector['InstitutionDataSelector']):
@@ -105,6 +110,14 @@ class InstitutionDataSelector(BaseSelector['InstitutionDataSelector']):
     processed: bool = False
     paper_count: bool = False
     name_variants: bool = False
+
+InstitutionDataAllSelected = InstitutionDataSelector(
+    name = True,
+    id = True,
+    processed = True,
+    paper_count = True,
+    name_variants = True
+)
 
 class AuthorDataSelector(BaseSelector['AuthorDataSelector']):
     class NameSelector(BaseModel):
@@ -117,11 +130,22 @@ class AuthorDataSelector(BaseSelector['AuthorDataSelector']):
     preferred_name: Union[bool, NameSelector] = False
     id: bool = False
     name_variants: bool = False
-    subjects: bool = False
+    subjects: Union[bool, SubjectSelector] = False
     institution_current: Union[bool, InstitutionDataSelector] = False
     other_institutions: Union[bool, InstitutionDataSelector] = False
     paper_count: bool = False
     paper_ids: Union[bool, PaperIDSelector] = False
+
+AuthorDataAllSelected = AuthorDataSelector(
+    preferred_name = True,
+    id = True,
+    name_variants = True,
+    subjects = True,
+    institution_current = True,
+    other_institutions = True,
+    paper_count = True,
+    paper_ids = True
+)
 
 class TopicSelector(BaseModel):
     descriptor: bool = False
