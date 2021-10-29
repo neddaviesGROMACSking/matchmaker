@@ -1,7 +1,13 @@
+from matchmaker.query_engine.data_types import BasePaperData
 from matchmaker.query_engine.query_types import PaperSearchQuery, AuthorSearchQuery, InstitutionSearchQuery
 from matchmaker.query_engine.backends.scopus import ScopusBackend
+from matchmaker.query_engine.selector_types import PaperDataSelector
 from secret import scopus_api_key, scopus_inst_token
 import asyncio
+scopus_backend = ScopusBackend(scopus_api_key, scopus_inst_token)
+paper_searcher = scopus_backend.paper_search_engine()
+author_searcher = scopus_backend.author_search_engine()
+inst_searcher = scopus_backend.institution_search_engine()
 author_search = AuthorSearchQuery.parse_obj({
     'query':{
         'tag': 'and',
@@ -37,7 +43,13 @@ paper_search = PaperSearchQuery.parse_obj({
                 }
             }
         ]
-    }
+    },
+    'selector': paper_searcher.complete_fields.dict()
+    #'selector': PaperDataSelector.parse_obj({
+    #    'paper_id':{'doi': True},
+    #    'institutions':{'id': True},
+    #    'authors': {'other_institutions': {'id': True}}
+    #})
 })
 inst_search = InstitutionSearchQuery.parse_obj({
     'query':{
@@ -50,11 +62,9 @@ inst_search = InstitutionSearchQuery.parse_obj({
 })
 
 
-scopus_backend = ScopusBackend(scopus_api_key, scopus_inst_token)
+
 async def main():
-    paper_searcher = scopus_backend.paper_search_engine()
-    author_searcher = scopus_backend.author_search_engine()
-    inst_searcher = scopus_backend.institution_search_engine()
+
 
     paper_results = await paper_searcher(paper_search)
     author_results = await author_searcher(author_search)

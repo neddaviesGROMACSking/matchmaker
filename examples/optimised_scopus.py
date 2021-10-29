@@ -50,13 +50,13 @@ author_search = AuthorSearchQuery.parse_obj({
                     'value': 'Kings College'
                 }
             },
-            #{
-            #    'tag': 'author',
-            #    'operator': {
-            #        'tag': 'equal',
-            #        'value': 'Green'
-            #    }
-            #},
+            {
+                'tag': 'author',
+                'operator': {
+                    'tag': 'equal',
+                    'value': 'Green'
+                }
+            },
             {
                 'tag': 'year',
                 'operator': {

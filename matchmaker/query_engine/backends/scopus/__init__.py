@@ -148,6 +148,7 @@ class PaperSearchQueryEngine(
             'year': True,
             'source_title': True,
             'source_title_id': True,
+            'abstract': True,
             'keywords': True,
             'institutions': {
                 'name': True,
@@ -206,6 +207,7 @@ class PaperSearchQueryEngine(
     
     async def _post_process(self, query: PaperSearchQuery, data: List[ScopusSearchResult]) -> List[PaperData]:
         new_papers = []
+        model = BasePaperData.generate_model_from_selector(query.selector)
         for i, paper in enumerate(data):
             new_paper_dict ={}
             paper_dict = paper.dict()
@@ -282,96 +284,103 @@ class PaperSearchQueryEngine(
                 auth_id_selected in query.selector,
                 other_inst_id_selected in query.selector
             ]):
-                author_names = paper_dict['author_names'] # TODO Continue adding selector logic
+                author_names = paper_dict['author_names']
+
                 if author_names is not None:
                     if author_names[0] == '(':
                         author_names = author_names[1:-1].split(';')
                     else:
                         author_names = author_names.split(';')
-                    
-                    new_author_names = []
-                    for author_name in author_names:
-                        names = author_name.split(',')
-                        surname = names[0]
-                        if len(names) > 1:
-                            given_names = names[1]
-                        else:
-                            given_names = None
-                        new_author_name = {
-                            'surname': surname,
-                            'given_names': given_names
-                        }
-                        new_author_names.append(new_author_name)
 
-                    author_afids = paper_dict['author_afids']
-                    if author_afids is not None:
-                        author_afids = [i.split('-') for i in author_afids.split(';')]
-
-                    author_ids = paper_dict['author_ids']
-                    if author_ids is not None:
-                        author_ids = author_ids.split(';')
-                    
-
+                    if other_inst_id_selected in query.selector:
+                        author_afids = paper_dict['author_afids']
+                        if author_afids is not None:
+                            author_afids = [i.split('-') for i in author_afids.split(';')]
+                    else:
+                        author_afids = None
+                    if auth_id_selected in query.selector:
+                        author_ids = paper_dict['author_ids']
+                        if author_ids is not None:
+                            author_ids = author_ids.split(';')
+                    else:
+                        author_ids = None
+            
                     new_authors = []
-                    for j, author_name in enumerate(new_author_names):
-                        if author_ids is not None and (len(new_author_names) == len(author_ids)):
-                            author_id = author_ids[j]
-                        else:
-                            author_id = None
-                        if author_afids is not None and len(new_author_names) == len(author_afids):
-                            other_institutions = [{'id': k} for k in author_afids[j]]
-                        else:
-                            other_institutions = []
-                        new_author = {
-                            'preferred_name': author_name,
-                            'other_institutions': other_institutions,
-                            'id': author_id
-                        }
+                    for j, author_name in enumerate(author_names):
+                        new_author = {}
+                        if any([
+                            surname_selected in query.selector,
+                            given_names_selected in query.selector,
+                        ]):
+                            new_author_name = {}
+                            names = author_name.split(',')
+                            if surname_selected in query.selector:
+                                new_author_name['surname'] = names[0]
+                            if given_names_selected in query.selector:
+                                if len(names) > 1:
+                                    given_names = names[1]
+                                else:
+                                    given_names = None
+                                new_author_name['given_names'] = given_names
+                            new_author['preferred_name'] = new_author_name
+                        if auth_id_selected in query.selector:
+                            if author_ids is not None and (len(author_names) == len(author_ids)):
+                                new_author['id'] = author_ids[j]
+                            else:
+                                new_author['id'] = None
+                        if other_inst_id_selected in query.selector:
+                            if author_afids is not None and len(author_names) == len(author_afids):
+                                new_author['other_institutions'] = [{'id': k} for k in author_afids[j]]
+                            else:
+                                new_author['other_institutions'] = []
                         new_authors.append(new_author)
                 else:
                     new_authors = []
                 new_paper_dict['authors'] = new_authors
 
-            affilname = paper_dict['affilname']
-            if affilname is not None:
-                afid = paper_dict['afid']
-                if afid is not None:
-                    afids = afid.split(';')
+            inst_id_selected = PaperDataSelector.parse_obj({'institutions': {'id': True}})
+            inst_name_selected = PaperDataSelector.parse_obj({'institutions': {'name': True}})
+            inst_proc_selected = PaperDataSelector.parse_obj({'institutions': {'processed': True}})
+            if any([
+                inst_id_selected in query.selector,
+                inst_name_selected in query.selector,
+                inst_proc_selected in query.selector
+            ]):
+                affilname = paper_dict['affilname']
+                if affilname is not None:
+                    afid = paper_dict['afid']
+                    if afid is not None:
+                        afids = afid.split(';')
+                    else:
+                        afids = afid
+                    affil_names = unescape(affilname).split(';')
+                    affil_cities = unescape(paper_dict['affiliation_city']).split(';')
+                    affil_countries = unescape(paper_dict['affiliation_country']).split(';')
+
+                    new_institutions = []
+                    for i, affil_name in enumerate(affil_names):
+                        new_institution = {}
+                        if inst_id_selected in query.selector:
+                            if len(affil_names) == len(afids):
+                                new_institution['id'] = afids[i]
+                        if inst_proc_selected in query.selector:
+                            affil_proc = []
+                            affil_proc.append((affil_name, 'house'))
+                            if len(affil_cities) == len(affil_names):
+                                affil_city = affil_cities[i]
+                                affil_proc.append((affil_city, 'city'))
+                            if len(affil_countries) == len(affil_names):
+                                affil_country = affil_countries[i]
+                                affil_proc.append((affil_country, 'country'))
+                            new_institution['processed'] = affil_proc
+                        if inst_name_selected in query.selector:
+                            new_institution['name'] = affil_name
+                        new_institutions.append(new_institution)
                 else:
-                    afids = afid
-                affil_names = unescape(affilname).split(';')
-                affil_cities = unescape(paper_dict['affiliation_city']).split(';')
-                affil_countries = unescape(paper_dict['affiliation_country']).split(';')
-                affil_procs = []
+                    new_institutions = None
+                new_paper_dict['institutions'] = new_institutions
 
-                for i, a_name in enumerate(affil_names):
-                    affil_proc = []
-                    affil_proc.append((a_name, 'house'))
-                    if len(affil_cities) == len(affil_names):
-                        affil_city = affil_cities[i]
-                        affil_proc.append((affil_city, 'city'))
-                    if len(affil_countries) == len(affil_names):
-                        affil_country = affil_countries[i]
-                        affil_proc.append((affil_country, 'country'))
-                    affil_procs.append(affil_proc)
-
-                new_institutions = []
-                for m, affil_name in enumerate(affil_names):
-                    new_institution = {}
-                    if len(affil_names) == len(afids):
-                        new_institution['id'] = afids[m]
-                    if len(affil_names) == len(affil_procs):
-                        new_institution['processed'] = affil_procs[m]
-                    new_institution['name'] = affil_name
-                    new_institutions.append(new_institution)
-            else:
-                new_institutions = None
-            new_paper_dict['institutions'] = new_institutions
-
-
-
-            print(new_paper_dict.keys())
-            new_papers.append(PaperData.parse_obj(new_paper_dict))
+            new_papers.append(model.parse_obj(new_paper_dict))
         return new_papers
 
 

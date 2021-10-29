@@ -51,7 +51,7 @@ class BaseSelector(Generic[Selector], BaseModel):
         item_dict = item.dict()
         return s_dict1_in_s_dict2(item_dict, self_dict)
 
-    def generate_model(self, base_model: BaseModel, full_model: BaseModel) -> BaseModel:
+    def generate_model(self, base_model: BaseModel, full_model: BaseModel, model_mapper: Dict[str, BaseModel] = {}) -> BaseModel:
         def make_model(model_name, selector_dict, base, fields):
             ellipsis_type = type(...)
             new_attrs: Dict[str, Tuple[type,Union[type, ellipsis_type]]] = {}
@@ -68,7 +68,13 @@ class BaseSelector(Generic[Selector], BaseModel):
                 elif isinstance(selector_value, dict):
                     model_field = fields[name]
                     sub_model_fields = model_field.type_.__fields__
-                    base_model = model_field.type_.mro()[1] # TODO Find a better way to obtain - need super class
+                    if name in model_mapper:
+                        base_model = model_mapper[name]
+                    else:
+                        base_model = BaseModel
+
+                    #base_model = model_field.type_.mro()[1] # TODO Find a better way to obtain - need super class
+
                     sub_model_name = model_field.type_.__name__
                     if model_field.required:
                         field_default = ...
