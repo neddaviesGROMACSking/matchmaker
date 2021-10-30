@@ -189,7 +189,7 @@ class PaperSearchQueryEngine(
             else:
                 view = 'COMPLETE'
         else:
-            overselected_fields = query.selector.get_values_overselected(self.available_fields)
+            overselected_fields = self.available_fields.get_values_overselected(query.selector)
             raise QueryNotSupportedError(overselected_fields)
 
         if cache_remaining > 1:
@@ -491,7 +491,7 @@ class InstitutionSearchQueryEngine(
     def __init__(self, api_key:str , institution_token: str, rate_limiter: RateLimiter = RateLimiter(max_requests_per_second = 6), *args, **kwargs):
         self.api_key = api_key
         self.institution_token = institution_token
-        self.available_fields = InstitutionData.parse_obj({
+        self.available_fields = InstitutionDataSelector.parse_obj({
             'id': True,
             'name': True,
             'name_variants': True,

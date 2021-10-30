@@ -3,6 +3,7 @@ from typing import Any, Dict, Generic, List, Optional, Tuple, TypeVar, Union
 from typing_extensions import get_origin
 from matchmaker.query_engine.id_types import PaperIDSelector
 from pydantic import BaseModel, create_model
+from copy import copy
 
 SelectorDict = Dict[str, Union[bool, 'SelectorDict']]
 Selector = TypeVar('Selector', bound = BaseModel)
@@ -51,6 +52,51 @@ class BaseSelector(Generic[Selector], BaseModel):
         item_dict = item.dict()
         return s_dict1_in_s_dict2(item_dict, self_dict)
 
+    def get_values_overselected(self, selector: Selector) -> List[List[str]]:
+        # Potentially make contain depend on this method, 
+        # returning True if it raises ValuesNotOverselected
+        def get_overselects(current_path: List[str], dict1: SelectorDict, dict2: SelectorDict) -> List[List[str]]:
+            def get_paths_from_dict_matching_value(current_path: List[str], dict_to_extract: SelectorDict, value: bool) -> List[List[str]]:
+                matches = []
+                new_current_path = copy(current_path)
+                for k, v in dict_to_extract.items():
+                    new_current_path += [k]
+                    if isinstance(v, bool) and v == value:
+                        matches += [new_current_path]
+                    elif isinstance(v, dict):
+                        matches += get_paths_from_dict_matching_value(new_current_path, v, value)
+                    new_current_path = new_current_path[0:-1]
+                return matches
+
+            total_overselects = []
+            new_current_path = copy(current_path)
+            for k, self_v in dict2.items():
+                new_current_path += [k]
+                item_v = dict1[k]
+                overselects = []
+                if self_v is False and item_v is True:
+                    overselects = [new_current_path]
+                elif self_v is False and isinstance(item_v, dict):
+                    overselects = get_paths_from_dict_matching_value(new_current_path, item_v, True)
+
+                elif isinstance(self_v, dict) and item_v is True:
+                    overselects = get_paths_from_dict_matching_value(new_current_path, self_v, False)
+
+                elif isinstance(self_v, dict) and isinstance(item_v, dict):
+                    overselects = get_overselects(new_current_path, item_v, self_v)
+
+                else:
+                    overselects = []
+                total_overselects += copy(overselects)
+                new_current_path = new_current_path[0:-1]
+            return total_overselects
+        self_dict = self.dict()
+        item_dict = selector.dict()
+        overselects = get_overselects([], item_dict, self_dict)
+        if overselects == []:
+            raise ValueError('ValuesNotOverSelected')
+        return overselects
+
     def generate_model(self, base_model: BaseModel, full_model: BaseModel, model_mapper: Dict[str, BaseModel] = {}) -> BaseModel:
         def make_model(model_name, selector_dict, base, fields):
             ellipsis_type = type(...)
@@ -97,11 +143,6 @@ class BaseSelector(Generic[Selector], BaseModel):
         model = make_model(base_model.__name__, selector_dict, base_model, fields)
         return model
 
-    def get_values_overselected(self, selector: Selector) -> List[str]:
-        # TODO produce fields selected in self and not in supplied selector
-        # Potentially make contain depend on this method, 
-        # returning True if it raises ValuesNotOverselected
-        raise NotImplementedError
 
 
 class InstitutionDataSelector(BaseSelector['InstitutionDataSelector']):

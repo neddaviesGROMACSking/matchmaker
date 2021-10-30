@@ -44,7 +44,8 @@ paper_search = PaperSearchQuery.parse_obj({
             }
         ]
     },
-    'selector': paper_searcher.complete_fields.dict()
+
+    #'selector': paper_searcher.complete_fields.dict()
     #'selector': PaperDataSelector.parse_obj({
     #    'paper_id':{'doi': True},
     #    'institutions':{'id': True},
@@ -65,8 +66,10 @@ inst_search = InstitutionSearchQuery.parse_obj({
 
 async def main():
     paper_results = await paper_searcher(paper_search)
-    author_results = await author_searcher(author_search)
-    inst_results = await inst_searcher(inst_search)
+    
+    #author_results = await author_searcher(author_search)
+   
+    #inst_results = await inst_searcher(inst_search)
     return paper_results
 paper_results = asyncio.run(main())
 print(paper_results[0:4])
