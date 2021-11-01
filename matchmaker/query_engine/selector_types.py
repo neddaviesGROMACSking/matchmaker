@@ -97,6 +97,11 @@ class BaseSelector(Generic[Selector], BaseModel):
             raise ValueError('ValuesNotOverSelected')
         return overselects
 
+    def generate_subset_selector(self, fields_available: Selector):
+        # Produce a version of self limited to only the fields available
+        raise NotImplementedError
+
+
     def generate_model(self, base_model: BaseModel, full_model: BaseModel, model_mapper: Dict[str, BaseModel] = {}) -> BaseModel:
         def make_model(model_name, selector_dict, base, fields):
             ellipsis_type = type(...)
@@ -143,7 +148,7 @@ class BaseSelector(Generic[Selector], BaseModel):
         model = make_model(base_model.__name__, selector_dict, base_model, fields)
         return model
 
-
+# TODO Make all selectors inherit from BaseSelector
 
 class InstitutionDataSelector(BaseSelector['InstitutionDataSelector']):
     name: bool = False
