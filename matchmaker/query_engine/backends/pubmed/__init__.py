@@ -13,6 +13,7 @@ from matchmaker.query_engine.backends import (
     NewAsyncClient,
     RateLimiter,
 )
+from matchmaker.query_engine.backends.exceptions import QueryNotSupportedError
 from matchmaker.query_engine.backends.pubmed.api import (
     MeshTopic,
     PubmedAuthor,
@@ -32,6 +33,7 @@ from matchmaker.query_engine.backends.pubmed.processors import (
     ProcessedIndividual,
     process_institution,
 )
+from matchmaker.query_engine.backends.tools import replace_dict_tags, replace_ids
 from matchmaker.query_engine.data_types import AuthorData, BasePaperData, PaperData
 from matchmaker.query_engine.query_types import AuthorSearchQuery, PaperSearchQuery
 from matchmaker.query_engine.query_types import (
@@ -46,14 +48,15 @@ from matchmaker.query_engine.query_types import (
     Title,
     Year,
 )
+from matchmaker.query_engine.selector_types import (
+    PaperDataAllSelected,
+    PaperDataSelector,
+    SubPaperDataAllSelected,
+    SubPaperDataSelector,
+    AuthorDataSelector
+)
 from pydantic import BaseModel, Field
 from pydantic.error_wrappers import ValidationError
-from matchmaker.query_engine.backends.tools import (
-    replace_ids,
-    replace_dict_tags,
-)
-from matchmaker.query_engine.backends.exceptions import QueryNotSupportedError
-from matchmaker.query_engine.selector_types import PaperDataSelector, SubPaperDataSelector, PaperDataAllSelected, SubPaperDataAllSelected
 # TODO Use generators to pass information threough all levels
 
 and_int = And['PubMedAuthorSearchQuery']
@@ -87,6 +90,7 @@ class ProcessedAuthorData(BaseModel):
 
 def paper_from_native(data):
     raise NotImplementedError('TODO')
+
 
 
 def make_doi_search_term(doi_list):
@@ -366,209 +370,220 @@ class PaperSearchQueryEngine(
         return make_coroutine, metadata
 
     async def _post_process(self, query: PaperSearchQuery, data: List[PubmedNativeData]) -> List[PaperData]:
+        def construct_process_paper_data(selector: PaperDataSelector):
+            model = BasePaperData.generate_model_from_selector(selector)
+            sub_paper_selector = SubPaperDataSelector.parse_obj(selector.dict())
+            if isinstance(selector.references, bool):
+                if selector.references:
+                    ref_sub_paper_selector = deepcopy(SubPaperDataAllSelected)
+                else:
+                    ref_sub_paper_selector = None
+            else:
+                ref_sub_paper_selector = SubPaperDataSelector.parse_obj(selector.references.dict())
 
-        def process_sub_paper_data(data_dict, selector: SubPaperDataSelector):
-            new_data_dict = {}
-            doi_selected = SubPaperDataSelector.parse_obj({'paper_id':{'doi':True}})
-            pmid_selected = SubPaperDataSelector.parse_obj({'paper_id':{'pubmed_id':True}})
-            if any([
-                doi_selected in selector,
-                pmid_selected in selector
-            ]):
-                paper_id = {}
-                if doi_selected in selector:
-                    paper_id['doi'] = data_dict['paper_id']['doi']
-                if pmid_selected in selector:
-                    paper_id['pubmed_id'] = data_dict['paper_id']['pubmed']
+            if isinstance(selector.cited_by, bool):
+                if selector.cited_by:
+                    cited_sub_paper_selector = deepcopy(SubPaperDataAllSelected)
+                else:
+                    cited_sub_paper_selector = None
+            else:
+                cited_sub_paper_selector = SubPaperDataSelector.parse_obj(selector.cited_by.dict())
+            def process_paper_data(data):
+                def process_sub_paper_data(data_dict, selector: SubPaperDataSelector):
+                    new_data_dict = {}
+                    doi_selected = SubPaperDataSelector.parse_obj({'paper_id':{'doi':True}})
+                    pmid_selected = SubPaperDataSelector.parse_obj({'paper_id':{'pubmed_id':True}})
+                    if any([
+                        doi_selected in selector,
+                        pmid_selected in selector
+                    ]):
+                        paper_id = {}
+                        if doi_selected in selector:
+                            paper_id['doi'] = data_dict['paper_id']['doi']
+                        if pmid_selected in selector:
+                            paper_id['pubmed_id'] = data_dict['paper_id']['pubmed']
 
-                new_data_dict['paper_id'] = paper_id
+                        new_data_dict['paper_id'] = paper_id
 
 
-            if SubPaperDataSelector(title = True) in selector:
-                new_data_dict['title'] = data_dict['title']
+                    if SubPaperDataSelector(title = True) in selector:
+                        new_data_dict['title'] = data_dict['title']
 
-            if SubPaperDataSelector(year = True) in selector:
-                new_data_dict['year'] = data_dict['year']
+                    if SubPaperDataSelector(year = True) in selector:
+                        new_data_dict['year'] = data_dict['year']
 
 
 
-            surname_selected = SubPaperDataSelector.parse_obj({
-                'authors':{
-                    'preferred_name':{
-                        'surname': True
-                    }
-                }
-            })
-            given_names_selected = SubPaperDataSelector.parse_obj({
-                'authors':{
-                    'preferred_name':{
-                        'given_names': True
-                    }
-                }
-            })
-            initials_selected = SubPaperDataSelector.parse_obj({
-                'authors':{
-                    'preferred_name':{
-                        'initials': True
-                    }
-                }
-            })
-            current_inst_name_selected = SubPaperDataSelector.parse_obj({
-                'authors':{
-                    'current_institution':{
-                        'name': True
-                    }
-                }
-            })
-            current_inst_proc_selected = SubPaperDataSelector.parse_obj({
-                'authors':{
-                    'current_institution':{
-                        'processed': True
-                    }
-                }
-            })
+                    surname_selected = SubPaperDataSelector.parse_obj({
+                        'authors':{
+                            'preferred_name':{
+                                'surname': True
+                            }
+                        }
+                    })
+                    given_names_selected = SubPaperDataSelector.parse_obj({
+                        'authors':{
+                            'preferred_name':{
+                                'given_names': True
+                            }
+                        }
+                    })
+                    initials_selected = SubPaperDataSelector.parse_obj({
+                        'authors':{
+                            'preferred_name':{
+                                'initials': True
+                            }
+                        }
+                    })
+                    current_inst_name_selected = SubPaperDataSelector.parse_obj({
+                        'authors':{
+                            'current_institution':{
+                                'name': True
+                            }
+                        }
+                    })
+                    current_inst_proc_selected = SubPaperDataSelector.parse_obj({
+                        'authors':{
+                            'current_institution':{
+                                'processed': True
+                            }
+                        }
+                    })
 
-            if any([
-                surname_selected in selector,
-                given_names_selected in selector,
-                initials_selected in selector,
-                current_inst_name_selected in selector,
-                current_inst_proc_selected in selector
-            ]):
-                new_authors = []
-                for author in data_dict['author_list']:
-                    author_root = author
-                    new_author = {}
                     if any([
                         surname_selected in selector,
                         given_names_selected in selector,
                         initials_selected in selector,
-                    ]):
-                        new_name = {}
-                        if surname_selected in selector:
-                            if 'last_name' in author_root:
-                                new_name['surname'] = author_root['last_name']
-                            else:
-                                new_name['surname'] = author_root['collective_name']
-                        if given_names_selected in selector:
-                            if 'given_names' in author_root:
-                                new_name['given_names'] = author_root['fore_name']
-                            else:
-                                new_name['given_names'] = None
-                        if initials_selected in selector:
-                            if 'initials' in author_root:
-                                new_name['initials'] = author_root['initials']
-                        new_author['preferred_name'] = new_name
-                    if any([
                         current_inst_name_selected in selector,
                         current_inst_proc_selected in selector
                     ]):
-                        new_institution = {}
-                        institution = author_root['institution']
-                        if current_inst_name_selected in selector:
-                            new_institution['name'] = institution
-                        if current_inst_proc_selected in selector:
-                            if institution is None:
-                                new_institution['processed'] = None
-                            else:
-                                new_institution['processed'] = process_institution(institution)
-                        new_author['institution_current'] = new_institution
-                    new_authors += [new_author]
-                new_data_dict['authors'] = new_authors
+                        new_authors = []
+                        for author in data_dict['author_list']:
+                            author_root = author
+                            new_author = {}
+                            if any([
+                                surname_selected in selector,
+                                given_names_selected in selector,
+                                initials_selected in selector,
+                            ]):
+                                new_name = {}
+                                if surname_selected in selector:
+                                    if 'last_name' in author_root:
+                                        new_name['surname'] = author_root['last_name']
+                                    else:
+                                        new_name['surname'] = author_root['collective_name']
+                                if given_names_selected in selector:
+                                    if 'given_names' in author_root:
+                                        new_name['given_names'] = author_root['fore_name']
+                                    else:
+                                        new_name['given_names'] = None
+                                if initials_selected in selector:
+                                    if 'initials' in author_root:
+                                        new_name['initials'] = author_root['initials']
+                                new_author['preferred_name'] = new_name
+                            if any([
+                                current_inst_name_selected in selector,
+                                current_inst_proc_selected in selector
+                            ]):
+                                new_institution = {}
+                                institution = author_root['institution']
+                                if current_inst_name_selected in selector:
+                                    new_institution['name'] = institution
+                                if current_inst_proc_selected in selector:
+                                    if institution is None:
+                                        new_institution['processed'] = None
+                                    else:
+                                        new_institution['processed'] = process_institution(institution)
+                                new_author['institution_current'] = new_institution
+                            new_authors += [new_author]
+                        new_data_dict['authors'] = new_authors
 
-            if SubPaperDataSelector(source_title = True) in selector:
-                new_data_dict['source_title'] = data_dict['journal_title']
+                    if SubPaperDataSelector(source_title = True) in selector:
+                        new_data_dict['source_title'] = data_dict['journal_title']
 
-            if SubPaperDataSelector(source_title_abr = True) in selector:
-                new_data_dict['source_title_abr'] = data_dict['journal_title_abr']
+                    if SubPaperDataSelector(source_title_abr = True) in selector:
+                        new_data_dict['source_title_abr'] = data_dict['journal_title_abr']
 
-            if SubPaperDataSelector(abstract = True) in selector:
-                abstract = data_dict['abstract']
-                if isinstance(abstract, list):
-                    abstract_proc = []
-                    for item in abstract:
-                        if item['label'] is None and item['nlm_category'] is None:
-                            new_item = (None, item['text'])
-                        elif item['label'] is None:
-                            new_item = (item['nlm_category'], item['text'])
-                        elif item['nlm_category'] is None:
-                            new_item = (item['label'], item['text'])
+                    if SubPaperDataSelector(abstract = True) in selector:
+                        abstract = data_dict['abstract']
+                        if isinstance(abstract, list):
+                            abstract_proc = []
+                            for item in abstract:
+                                if item['label'] is None and item['nlm_category'] is None:
+                                    new_item = (None, item['text'])
+                                elif item['label'] is None:
+                                    new_item = (item['nlm_category'], item['text'])
+                                elif item['nlm_category'] is None:
+                                    new_item = (item['label'], item['text'])
+                                else:
+                                    item_title = item['label'] + ';' + item['nlm_category']
+                                    new_item = (item_title, item['text'])
+                                abstract_proc.append(new_item)
                         else:
-                            item_title = item['label'] + ';' + item['nlm_category']
-                            new_item = (item_title, item['text'])
-                        abstract_proc.append(new_item)
-                else:
-                    abstract_proc = abstract
-                new_data_dict['abstract'] = abstract_proc
+                            abstract_proc = abstract
+                        new_data_dict['abstract'] = abstract_proc
 
 
-            qualifier_selected = SubPaperDataSelector.parse_obj({'topics': {'qualifier': True}})
-            descriptor_selected = SubPaperDataSelector.parse_obj({'topics': {'descriptor': True}})
-            if any([
-                qualifier_selected in selector,
-                descriptor_selected in selector
-            ]):
-                new_topics = []
-                for topic in data_dict['topics']:
-                    new_topic = {}
-                    if qualifier_selected in selector:
-                        new_topic['qualifier'] = topic['qualifier']
-                    if descriptor_selected in selector:
-                        new_topic['descriptor'] = topic['descriptor']
-                    new_topics += [new_topic]
-                new_data_dict['topics'] = new_topics
+                    qualifier_selected = SubPaperDataSelector.parse_obj({'topics': {'qualifier': True}})
+                    descriptor_selected = SubPaperDataSelector.parse_obj({'topics': {'descriptor': True}})
+                    if any([
+                        qualifier_selected in selector,
+                        descriptor_selected in selector
+                    ]):
+                        new_topics = []
+                        for topic in data_dict['topics']:
+                            new_topic = {}
+                            if qualifier_selected in selector:
+                                new_topic['qualifier'] = topic['qualifier']
+                            if descriptor_selected in selector:
+                                new_topic['descriptor'] = topic['descriptor']
+                            new_topics += [new_topic]
+                        new_data_dict['topics'] = new_topics
 
 
-            if SubPaperDataSelector(keywords = True) in selector:
-                new_data_dict['keywords'] = data_dict['keywords']
-            return new_data_dict
+                    if SubPaperDataSelector(keywords = True) in selector:
+                        new_data_dict['keywords'] = data_dict['keywords']
+                    return new_data_dict
+
+                data_dict = data.dict()
+                new_data_dict = process_sub_paper_data(data_dict, sub_paper_selector)
+                if ref_sub_paper_selector is not None:
+                    all_except_refs = deepcopy(PaperDataAllSelected)
+                    all_except_refs.references = False
+                    # If references is False
+                    # And everything else is True
+                    # And selector is not in this
+                    # something in references must be selected
+                    if selector not in all_except_refs:
+                        new_references = []
+                        for j in data_dict['references']:
+                            refs_paper_dict = process_sub_paper_data(j, ref_sub_paper_selector)
+                            new_references.append(refs_paper_dict)
+                        new_data_dict['references'] = new_references
+                if cited_sub_paper_selector is not None:
+                    all_except_refs = deepcopy(PaperDataAllSelected)
+                    all_except_refs.cited_by = False
+                    if selector not in all_except_refs:
+                        new_cited_bys = []
+                        for j in data_dict['cited_by']:
+                            cited_by_paper_dict = process_sub_paper_data(data_dict, cited_sub_paper_selector)
+                            new_cited_bys.append(cited_by_paper_dict)
+                        new_data_dict['cited_by'] = new_cited_bys
+                #print(new_data_dict)
+                print(model.parse_obj(new_data_dict))
+                return model.parse_obj(new_data_dict)
+            return process_paper_data
         
-
         new_data = []
-        sub_paper_selector = SubPaperDataSelector.parse_obj(query.selector.dict())
-        if isinstance(query.selector.references, bool):
-            if query.selector.references:
-                ref_sub_paper_selector = deepcopy(SubPaperDataAllSelected)
-            else:
-                ref_sub_paper_selector = None
-        else:
-            ref_sub_paper_selector = SubPaperDataSelector.parse_obj(query.selector.references.dict())
-
-        if isinstance(query.selector.cited_by, bool):
-            if query.selector.cited_by:
-                cited_sub_paper_selector = deepcopy(SubPaperDataAllSelected)
-            else:
-                cited_sub_paper_selector = None
-        else:
-            cited_sub_paper_selector = SubPaperDataSelector.parse_obj(query.selector.cited_by.dict())
+        process_paper_data = construct_process_paper_data(query.selector)
         for i in data:
-            data_dict = i.dict()
-            new_data_dict = process_sub_paper_data(data_dict, sub_paper_selector)
-            if ref_sub_paper_selector is not None:
-                all_except_refs = deepcopy(PaperDataAllSelected)
-                all_except_refs.references = False
-                # If references is False
-                # And everything else is True
-                # And selector is not in this
-                # something in references must be selected
-                if query.selector not in all_except_refs:
-                    new_references = []
-                    for j in data_dict['references']:
-                        refs_paper_dict = process_sub_paper_data(j, ref_sub_paper_selector)
-                        new_references.append(refs_paper_dict)
-                    new_data_dict['references'] = new_references
-            if cited_sub_paper_selector is not None:
-                all_except_refs = deepcopy(PaperDataAllSelected)
-                all_except_refs.cited_by = False
-                if query.selector not in all_except_refs:
-                    new_cited_bys = []
-                    for j in data_dict['cited_by']:
-                        cited_by_paper_dict = process_sub_paper_data(data_dict, cited_sub_paper_selector)
-                        new_cited_bys.append(cited_by_paper_dict)
-                    new_data_dict['cited_by'] = new_cited_bys
-            new_data.append(PaperData.parse_obj(new_data_dict))
-            
+            new_data.append(process_paper_data(i))
         return new_data
+
+
+
+
+
 
 
 
@@ -578,6 +593,14 @@ class AuthorSearchQueryEngine(
         
     def __init__(self, api_key, rate_limiter: RateLimiter = RateLimiter(), *args, **kwargs):
         self.api_key = api_key
+        self.available_fields = AuthorDataSelector.parse_obj({
+            'preferred_name': {
+                'surname': True,
+                'given_names': True,
+                'initials': True
+            },
+
+        })
         super().__init__(rate_limiter, *args, **kwargs)
 
     async def _query_to_awaitable(self, query: AuthorSearchQuery, client: NewAsyncClient) -> Tuple[
@@ -602,7 +625,7 @@ class AuthorSearchQueryEngine(
         return make_coroutine, metadata
 
 
-    async def _post_process(self, query: PaperSearchQuery, data: List[PubmedNativeData]) -> List[AuthorData]:
+    async def _post_process(self, query: AuthorSearchQuery, data: List[PubmedNativeData]) -> List[AuthorData]:
         def query_to_func(body_institution, body_author, body_topic):
             def query_to_term(query):
                 def make_string_term(body_string, q_value, operator):

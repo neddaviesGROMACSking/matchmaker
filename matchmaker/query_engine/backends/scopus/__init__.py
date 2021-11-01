@@ -35,7 +35,7 @@ from matchmaker.query_engine.backends.tools import (
     get_available_model_tags,
     check_model_tags
 )
-from matchmaker.query_engine.data_types import AuthorData, InstitutionData, PaperData, BasePaperData
+from matchmaker.query_engine.data_types import AuthorData, BaseAuthorData, BaseInstitutionData, InstitutionData, PaperData, BasePaperData
 from matchmaker.query_engine.selector_types import AuthorDataSelector, InstitutionDataSelector, PaperDataSelector
 from matchmaker.query_engine.query_types import (
     AuthorSearchQuery,
@@ -434,6 +434,7 @@ class AuthorSearchQueryEngine(
     
     async def _post_process(self, query: AuthorSearchQuery, data: List[ScopusAuthorSearchResult]) -> List[AuthorData]:
         new_authors = []
+        model = BaseAuthorData.generate_model_from_selector(query.selector)
         for author in data:
             author_dict = author.dict()
             new_author_dict = {}
@@ -481,7 +482,7 @@ class AuthorSearchQueryEngine(
                 'processed': processed
             }
             new_author_dict['institution_current'] = new_institution
-            new_authors.append(AuthorData.parse_obj(new_author_dict))
+            new_authors.append(model.parse_obj(new_author_dict))
         return new_authors
 
 
@@ -528,6 +529,7 @@ class InstitutionSearchQueryEngine(
         return make_coroutine, metadata
     
     async def _post_process(self, query: InstitutionSearchQuery, data: List[AffiliationSearchResult]) -> List[InstitutionData]:
+        model = BaseInstitutionData.generate_model_from_selector(query.selector)
         new_papers = []
         for paper in data:
             paper_dict = paper.dict()
@@ -548,7 +550,7 @@ class InstitutionSearchQueryEngine(
                 if paper_dict['country'] is not None:
                     processed.append((paper_dict['country'], 'country'))
                 new_paper_dict['processed'] = processed
-            new_paper = InstitutionData.parse_obj(new_paper_dict)
+            new_paper = model.parse_obj(new_paper_dict)
             new_papers.append(new_paper)
         return new_papers
 

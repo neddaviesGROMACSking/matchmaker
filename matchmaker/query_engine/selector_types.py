@@ -1,9 +1,79 @@
-from typing import Union
+from typing import Callable, Union
 from typing import Any, Dict, Generic, List, Optional, Tuple, TypeVar, Union
-from typing_extensions import get_origin
+from typing_extensions import get_origin, get_args
 from matchmaker.query_engine.id_types import PaperIDSelector
 from pydantic import BaseModel, create_model
+from pydantic.fields import ModelField
 from copy import copy
+import pdb
+def rec_get_args(tp: type) -> List[type]:
+    args = list(get_args(tp))
+    if args == []:
+        return [tp]
+    else:
+        new_args = []
+        for arg in args:
+            new_args += rec_get_args(arg)
+        return new_args
+
+def extract_sub_model(model_field: ModelField) -> Tuple[BaseModel, str, Callable[[BaseModel], type]]:
+    """
+    Takes a model field, returns:
+    Submodel type
+    Submodel name
+    Function that takes submodel type and wraps in outer types
+    """
+    EllipsisType = type(...)
+    SomethingType = Union[EllipsisType, type, Tuple[type, List['SomethingType']]]
+    def get_something_type(tp: type) -> Tuple[SomethingType, BaseModel]:
+        args = list(get_args(tp))
+        origin = get_origin(tp)
+        if args == [] or origin is None:
+            if hasattr(tp, '__fields__'):
+                return ..., tp
+            else:
+                return tp, None
+        else:
+            possible_models = []
+            new_args = []
+            for arg in args:
+                smtp, model = get_something_type(arg)
+                if model is not None:
+                    possible_models += [model]
+                new_args += [smtp]
+            if len(possible_models)>1:
+                raise ValueError('More than one base model found')
+            elif len(possible_models) == 1:
+                relevant_model = possible_models[0]
+            else:
+                relevant_model = None
+            return (origin, new_args), relevant_model
+    
+    def construct_func_type_wrapper_from_smtp(smtp: SomethingType):
+        def func_type_wrapper(submodel: BaseModel):                
+            def func_type_inner(current_smtp: SomethingType) -> type:
+                if isinstance(current_smtp, EllipsisType):
+                    return submodel
+                elif isinstance(current_smtp, tuple):
+                    origin = current_smtp[0]
+                    args = current_smtp[1]
+                    new_args = []
+                    for arg in args:
+                        new_arg = func_type_inner(arg)
+                        new_args += [new_arg]
+                    
+                    return origin[tuple(new_args)] #type:ignore
+                else:
+                    return current_smtp
+            return func_type_inner(smtp)
+        return func_type_wrapper
+
+    smth_type, submodel_type = get_something_type(model_field.outer_type_)
+    submodel_name = submodel_type.__name__
+    func_type_wrapper = construct_func_type_wrapper_from_smtp(smth_type)
+
+    return submodel_type, submodel_name, func_type_wrapper
+
 
 SelectorDict = Dict[str, Union[bool, 'SelectorDict']]
 Selector = TypeVar('Selector', bound = BaseModel)
@@ -117,32 +187,30 @@ class BaseSelector(Generic[Selector], BaseModel):
                             field_default = model_field.default
                         new_attrs[name] = (field_type, field_default)
                 elif isinstance(selector_value, dict):
+
                     model_field = fields[name]
-                    sub_model_fields = model_field.type_.__fields__
+                    submodel_type, sub_model_name, submodel_type_func = extract_sub_model(model_field)
+
+                    sub_model_fields = submodel_type.__fields__
+        
                     if name in model_mapper:
                         base_model = model_mapper[name]
                     else:
                         base_model = BaseModel
 
                     #base_model = model_field.type_.mro()[1] # TODO Find a better way to obtain - need super class
-
-                    sub_model_name = model_field.type_.__name__
                     if model_field.required:
                         field_default = ...
                     else:
                         field_default = model_field.default
 
                     sub_model = make_model(sub_model_name, selector_value, base_model, sub_model_fields)
-                    type_origin = get_origin(model_field.outer_type_)
-                    if type_origin is None:
-                        new_field_type = sub_model
-                    else:
-                        new_field_type = type_origin[sub_model]
+
+                    new_field_type = submodel_type_func(sub_model)
                     new_attrs[name] = (new_field_type, field_default)
                 else:
                     raise TypeError('Unsupported type in selector')
             return create_model(model_name, **new_attrs, __base__ = base)
-        
         fields = full_model.__fields__
         selector_dict = self.dict()
         model = make_model(base_model.__name__, selector_dict, base_model, fields)
