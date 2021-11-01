@@ -2,6 +2,8 @@ from matchmaker.query_engine.query_types import PaperSearchQuery, AuthorSearchQu
 from matchmaker.query_engine.backends.pubmed import PubmedBackend
 from secret import pubmed_api_key
 import asyncio
+pubmed_backend = PubmedBackend(api_key=pubmed_api_key)
+paper_searcher = pubmed_backend.paper_search_engine()
 author_search = AuthorSearchQuery.parse_obj({
     'query':{
         'tag': 'and',
@@ -38,24 +40,13 @@ paper_search = PaperSearchQuery.parse_obj({
             }
         ]
     },
-    'selector': {
-        'title': True,
-        'paper_id': {
-            'doi': True
-        },
-        'source_title_id': True,
-        'authors': {'id': True},
-        'topics': {
-            'qualifier': True
-        }
-    }
+    'selector': paper_searcher.available_fields
 })
-pubmed_backend = PubmedBackend(api_key=pubmed_api_key)
-async def main():
-    paper_searcher = pubmed_backend.paper_search_engine()
-    author_searcher = pubmed_backend.author_search_engine()
 
+async def main():
+
+    #sauthor_searcher = pubmed_backend.author_search_engine()
     paper_results = await paper_searcher(paper_search)
-    author_results = await author_searcher(author_search)
+    #author_results = await author_searcher(author_search)
     return paper_results
 paper_results = asyncio.run(main())

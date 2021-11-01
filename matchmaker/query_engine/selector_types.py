@@ -197,7 +197,7 @@ class TopicSelector(BaseModel):
     descriptor: bool = False
     qualifier: bool = False
 
-class SubPaperDataSelector(BaseModel):
+class SubPaperDataSelector(BaseSelector['SubPaperDataSelector']):
     paper_id: Union[bool, PaperIDSelector] = False
     title: bool = False
     authors: Union[bool, AuthorDataSelector] = False
@@ -209,6 +209,20 @@ class SubPaperDataSelector(BaseModel):
     institutions: Union[bool, InstitutionDataSelector]  = False
     keywords: bool = False
     topics: Union[bool, TopicSelector] = False
+
+SubPaperDataAllSelected = SubPaperDataSelector(
+    paper_id = True,
+    title = True,
+    authors = True,
+    year = True,
+    source_title = True,
+    source_title_id = True,
+    source_title_abr = True,
+    abstract = True,
+    institutions = True,
+    keywords = True,
+    topics = True
+)
 
 class PaperDataSelector(SubPaperDataSelector, BaseSelector['PaperDataSelector']):
     references: Union[bool, SubPaperDataSelector] = False
