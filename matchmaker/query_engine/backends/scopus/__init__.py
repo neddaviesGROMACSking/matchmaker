@@ -125,7 +125,7 @@ def institution_query_to_affiliation(query: InstitutionSearchQuery) -> Affiliati
 
 class PaperSearchQueryEngine(
         BasePaperSearchQueryEngine[List[ScopusSearchResult]]):
-    def __init__(self, api_key:str , institution_token: str, rate_limiter: RateLimiter = RateLimiter(max_requests_per_second = 9), full_view: bool = True, *args, **kwargs):
+    def __init__(self, api_key:str , institution_token: str, rate_limiter: RateLimiter = RateLimiter(max_requests_per_second = 9), *args, **kwargs):
         self.api_key = api_key
         self.institution_token = institution_token
         self.available_fields = PaperDataSelector.parse_obj({
@@ -362,8 +362,10 @@ class PaperSearchQueryEngine(
                     for i, affil_name in enumerate(affil_names):
                         new_institution = {}
                         if inst_id_selected in query.selector:
-                            if len(affil_names) == len(afids):
+                            if afids is not None and len(affil_names) == len(afids):
                                 new_institution['id'] = afids[i]
+                            else:
+                                new_institution['id'] = None
                         if inst_proc_selected in query.selector:
                             affil_proc = []
                             affil_proc.append((affil_name, 'house'))
@@ -560,11 +562,10 @@ class ScopusBackend(Backend):
         self.api_key = api_key
         self.institution_token = institution_token
     
-    def paper_search_engine(self, full_view: bool = True) -> PaperSearchQueryEngine:
+    def paper_search_engine(self) -> PaperSearchQueryEngine:
         return PaperSearchQueryEngine(
             api_key = self.api_key, 
-            institution_token = self.institution_token,
-            full_view = full_view
+            institution_token = self.institution_token
         )
 
     def author_search_engine(self) -> AuthorSearchQueryEngine:

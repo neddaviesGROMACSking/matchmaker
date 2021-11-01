@@ -1,5 +1,6 @@
 from typing import Callable, Union
 from typing import Any, Dict, Generic, List, Optional, Tuple, TypeVar, Union
+import typing
 from typing_extensions import get_origin, get_args
 from matchmaker.query_engine.id_types import PaperIDSelector
 from pydantic import BaseModel, create_model
@@ -61,8 +62,7 @@ def extract_sub_model(model_field: ModelField) -> Tuple[BaseModel, str, Callable
                     for arg in args:
                         new_arg = func_type_inner(arg)
                         new_args += [new_arg]
-                    
-                    return origin[tuple(new_args)] #type:ignore
+                    return origin[tuple(new_args)] #type: ignore - No way to verify origin has this method
                 else:
                     return current_smtp
             return func_type_inner(smtp)
@@ -163,14 +163,40 @@ class BaseSelector(Generic[Selector], BaseModel):
         self_dict = self.dict()
         item_dict = selector.dict()
         overselects = get_overselects([], item_dict, self_dict)
-        if overselects == []:
-            raise ValueError('ValuesNotOverSelected')
         return overselects
+    @classmethod
+    def generate_subset_selector(cls, selector: Selector, fields_available: Selector):
+        # Produce a version of selector limited to only the fields available
 
-    def generate_subset_selector(self, fields_available: Selector):
-        # Produce a version of self limited to only the fields available
-        raise NotImplementedError
+        def make_subset_selector_dict(selector_dict: SelectorDict, available_dict: SelectorDict):
+            subset_selector_dict = {}
+            for selector_k, selector_v in selector_dict.items():
+                available_v = available_dict[selector_k]
 
+                if selector_v is True and available_v is True:
+                    subset_selector_dict[selector_k] = selector_v
+                elif selector_v is True and available_v is False:
+                    pass
+                elif selector_v is False and available_v is True:
+                    pass
+                elif selector_v is False and available_v is False:
+                    pass
+                elif selector_v is True and isinstance(available_v, dict):
+                    subset_selector_dict[selector_k] = available_v
+                elif selector_v is False and isinstance(available_v, dict):
+                    pass
+                elif isinstance(selector_v, dict) and available_v is True:
+                    subset_selector_dict[selector_k] = selector_v
+                elif isinstance(selector_v, dict) and available_v is False:
+                    pass
+                elif isinstance(selector_v, dict) and isinstance(available_v, dict):
+                    subset_selector_dict[selector_k] = make_subset_selector_dict(selector_v, available_v)
+            return subset_selector_dict
+
+        selector_dict = selector.dict()
+        fields_available_dict = fields_available.dict()   
+        subset_selector_dict = make_subset_selector_dict(selector_dict, fields_available_dict)
+        return cls.parse_obj(subset_selector_dict)  
 
     def generate_model(self, base_model: BaseModel, full_model: BaseModel, model_mapper: Dict[str, BaseModel] = {}) -> BaseModel:
         def make_model(model_name, selector_dict, base, fields):

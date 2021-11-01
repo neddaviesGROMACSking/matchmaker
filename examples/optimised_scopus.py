@@ -76,6 +76,6 @@ async def main():
     return await op_scopus_author_engine(author_search)
 
 res = asyncio.run(main())
-print([r.source_title_abr for r in res])
+print([r.topics for r in res])
 
 #print([res.paper_id.doi for res in res])
