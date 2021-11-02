@@ -78,7 +78,7 @@ class BaseSelector(Generic[Selector], BaseModel):
                             return False
                     elif isinstance(v, dict):
                         inner_value = check_whole_dict_is_value(v, value)
-                        if inner_value != value:
+                        if not inner_value:
                             return False
                 return True
             for k, self_v in dict2.items():
@@ -197,7 +197,7 @@ class BaseSelector(Generic[Selector], BaseModel):
                             return False
                     elif isinstance(v, dict):
                         inner_value = check_whole_dict_is_value(v, value)
-                        if inner_value != value:
+                        if not inner_value:
                             return False
                 return True
             ellipsis_type = type(...)
@@ -216,7 +216,6 @@ class BaseSelector(Generic[Selector], BaseModel):
                     submodel_type, sub_model_name, submodel_type_func = extract_sub_model(model_field)
 
                     sub_model_fields = submodel_type.__fields__
-        
                     if name in model_mapper:
                         base_model = model_mapper[name]
                     else:
@@ -229,7 +228,6 @@ class BaseSelector(Generic[Selector], BaseModel):
                         field_default = model_field.default
 
                     sub_model = make_model(sub_model_name, selector_value, base_model, sub_model_fields)
-
                     new_field_type = submodel_type_func(sub_model)
                     new_attrs[name] = (new_field_type, field_default)
             return create_model(model_name, **new_attrs, __base__ = base)
