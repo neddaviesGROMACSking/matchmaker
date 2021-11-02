@@ -6,3 +6,5 @@ class QueryNotSupportedError(ValueError):
         msg = f"Unsupported fields selected: \n{new_fields}"
         super().__init__(msg)
 
+class SearchNotPossible(ValueError):
+    pass

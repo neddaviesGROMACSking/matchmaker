@@ -1,25 +1,11 @@
 from pydantic import BaseModel
 from typing import Generic, Union, List, Optional, Tuple, Dict, TypeVar
-from matchmaker.query_engine.id_types import PaperID
-from matchmaker.query_engine.selector_types import InstitutionDataSelector, AuthorDataSelector, PaperDataSelector, BaseSelector
-
+from matchmaker.query_engine.id_types import PaperIDDef, BasePaperID
+from matchmaker.query_engine.selector_types import InstitutionDataSelector, AuthorDataSelector, PaperDataSelector
+from matchmaker.query_engine.abstract_selector_types import BaseSelector
+from matchmaker.query_engine.abstract_data_types import BaseData
 
 SelectorType = TypeVar('SelectorType', bound = BaseSelector)
-
-class BaseData(BaseModel, Generic[SelectorType]):
-    @classmethod
-    def generate_model_from_selector(
-        cls, 
-        definition: BaseModel, 
-        selector: Union[bool, SelectorType], 
-        model_mapper: Dict[str, BaseModel] = {}):
-        if isinstance(selector, bool):
-            if selector:
-                return type(cls.__name__, (definition, cls), {}) 
-            else:
-                return cls
-        else:
-            return selector.generate_model(cls, definition, model_mapper)
 
 class InstitutionDataDef(BaseModel):
     name: Optional[str] = None
@@ -50,7 +36,7 @@ class AuthorDataDef(BaseModel):
     institution_current: Optional[InstitutionDataDef] = None
     other_institutions: List[InstitutionDataDef] = []
     paper_count: Optional[int] = None
-    paper_ids: Optional[List[PaperID]] = []
+    paper_ids: Optional[List[PaperIDDef]] = []
 
 class BaseAuthorData(BaseData[AuthorDataSelector]):
     @classmethod
@@ -60,7 +46,8 @@ class BaseAuthorData(BaseData[AuthorDataSelector]):
             selector,
             {
                 'institution_current': BaseInstitutionData,
-                'other_institutions': BaseInstitutionData
+                'other_institutions': BaseInstitutionData,
+                'paper_ids': BasePaperID
             }
         )
 
@@ -71,7 +58,7 @@ class Topic(BaseModel):
     qualifier: Optional[str]
 
 class SubPaperData(BaseModel):
-    paper_id: PaperID
+    paper_id: PaperIDDef
     title: str
     authors: List[AuthorDataDef]
     year: Optional[int]
@@ -97,7 +84,8 @@ class BasePaperData(BaseData[PaperDataSelector]):
                 'institutions': BaseInstitutionData,
                 'authors': BaseAuthorData,
                 'institution_current': BaseInstitutionData,
-                'other_institutions': BaseInstitutionData
+                'other_institutions': BaseInstitutionData,
+                'paper_id': BasePaperID
             }
         )
 

@@ -14,7 +14,7 @@ op_scopus_backend = OptimisedScopusBackend(
     )
 )
 
-
+op_scopus_query_engine = op_scopus_backend.paper_search_engine()
 
 paper_search = PaperSearchQuery.parse_obj({
     'query':{
@@ -36,7 +36,8 @@ paper_search = PaperSearchQuery.parse_obj({
                 }
             }
         ]
-    }
+    },
+    'selector': op_scopus_query_engine.possible_searches[1]
 })
 
 author_search = AuthorSearchQuery.parse_obj({
@@ -69,13 +70,13 @@ author_search = AuthorSearchQuery.parse_obj({
     }
 })
 
-op_scopus_query_engine = op_scopus_backend.paper_search_engine()
+
 op_scopus_author_engine = op_scopus_backend.author_search_engine()
 async def main():
     return await op_scopus_query_engine(paper_search)
     return await op_scopus_author_engine(author_search)
 
 res = asyncio.run(main())
-print([r.topics for r in res])
+#print([r.topics for r in res])
 
 #print([res.paper_id.doi for res in res])

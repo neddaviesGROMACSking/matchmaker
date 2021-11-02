@@ -569,8 +569,6 @@ class PaperSearchQueryEngine(
                             cited_by_paper_dict = process_sub_paper_data(data_dict, cited_sub_paper_selector)
                             new_cited_bys.append(cited_by_paper_dict)
                         new_data_dict['cited_by'] = new_cited_bys
-                #print(new_data_dict)
-                print(model.parse_obj(new_data_dict))
                 return model.parse_obj(new_data_dict)
             return process_paper_data
         

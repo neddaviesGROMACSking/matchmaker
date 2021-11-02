@@ -10,7 +10,7 @@ from matchmaker.query_engine.slightly_less_abstract import SlightlyLessAbstractQ
 from matchmaker.query_engine.backend import Backend
 from typing import Optional, Tuple, Callable, Awaitable, Dict, List, Generic, TypeVar, Union, Any
 from asyncio import get_running_loop, gather
-from matchmaker.query_engine.backends.exceptions import QueryNotSupportedError
+from matchmaker.query_engine.backends.exceptions import QueryNotSupportedError, SearchNotPossible
 from dataclasses import dataclass
 import pdb
 from pybliometrics.scopus.utils.constants import SEARCH_MAX_ENTRIES
@@ -79,8 +79,15 @@ class PaperSearchQueryEngine(
         self.scopus_paper_search = scopus_paper_search
         self.pubmed_paper_search = pubmed_paper_search
         self.complete_search_request_limit = complete_search_request_limit
+        self.pubmed_scopus_intercept_selector = PaperDataSelector.generate_subset_selector(self.scopus_paper_search.available_fields, self.pubmed_paper_search.available_fields)
         self.available_fields = PaperDataAllSelected
-        self.possible_searches = None
+        self.doi_selector = PaperDataSelector.parse_obj({'paper_id':{'doi': True}})
+        self.possible_searches = [
+            self.doi_selector,
+            self.pubmed_scopus_intercept_selector,
+            self.scopus_paper_search.available_fields,
+            self.pubmed_paper_search.available_fields
+        ]
     
     async def _query_to_awaitable(self, query: PaperSearchQuery) -> Tuple[Callable[[], Awaitable[List[BasePaperData]]], Dict[str, int]]:
         if query.selector not in self.available_fields:
@@ -88,13 +95,14 @@ class PaperSearchQueryEngine(
             raise QueryNotSupportedError(overselected_fields)
 
         scopus_query_selector = PaperDataSelector.generate_subset_selector(query.selector, self.scopus_paper_search.available_fields)
-        print(scopus_query_selector)
         scopus_query = deepcopy(query)
         scopus_query.selector = scopus_query_selector
+
+
         full_native_query = await self.scopus_paper_search.get_native_query(scopus_query)
         full_native_request_no = full_native_query.metadata['scopus_search']
         standard_query = deepcopy(query)
-        standard_query.selector = PaperDataSelector.parse_obj({'paper_id':{'doi': True}})
+        standard_query.selector = self.doi_selector
         standard_native_query = await self.scopus_paper_search.get_native_query(standard_query) 
         standard_native_request_no = standard_native_query.metadata['scopus_search']
         # For pubmed it's always the same, so this can be a good estimate
@@ -103,40 +111,66 @@ class PaperSearchQueryEngine(
             'scopus_search': full_native_request_no + standard_native_request_no,
             **pubmed_native_query.metadata
         }
+        pubmed_selector = PaperDataSelector.generate_subset_selector(query.selector, self.pubmed_paper_search.available_fields)
+        
         async def make_coroutine() -> List[BasePaperData]:
+            """
+            If you select just dois, standard query is all you get
+            If you select fields from pubmed intercept scopus, you get pubmed results and maybe go back to scopus for more data
+            If you select fields from pubmed you get just pubmed results
+            If you select fields from scopus you get just scopus results
+            """
             # Step 1 - get standard results
-            standard_data = await self.scopus_paper_search.get_data_from_native_query(query,standard_native_query)
-            doi_list_scopus = await get_doi_list_from_data(standard_data)
+            if query.selector in standard_query.selector:
+                # Step 1 - get standard results
+                standard_data = await self.scopus_paper_search.get_data_from_native_query(query,standard_native_query)
+                return standard_data
+            elif query.selector in self.pubmed_scopus_intercept_selector:
+                # Step 1 - get standard results
+                standard_data = await self.scopus_paper_search.get_data_from_native_query(query,standard_native_query)
+                doi_list_scopus = await get_doi_list_from_data(standard_data)
+                doi_query_pubmed = await get_doi_query_from_list(doi_list_scopus, pubmed_selector)
+                # Step 2 - get pubmed data from dois
+                pubmed_data = await self.pubmed_paper_search(doi_query_pubmed)
+                
+                doi_list_pubmed = await get_doi_list_from_data(pubmed_data)
+                dois_remaining = await get_dois_remaining(doi_list_scopus, doi_list_pubmed)
+                complete_no_requests = len(dois_remaining)//25 +2
 
-            pubmed_selector = PaperDataSelector.generate_subset_selector(query.selector, self.pubmed_paper_search.available_fields)
-            doi_query_pubmed = await get_doi_query_from_list(doi_list_scopus, pubmed_selector)
-            # Step 2 - get pubmed data from dois
-            pubmed_data = await self.pubmed_paper_search(doi_query_pubmed)
-            doi_list_pubmed = await get_doi_list_from_data(pubmed_data)
-            dois_remaining = await get_dois_remaining(doi_list_scopus, doi_list_pubmed)
-            complete_no_requests = len(dois_remaining)//25 +2
+                # Step 3 - get estimate for returning to scopus for more info
+                #pubmed will do same as always number of requests!
+                #But nature of the query depends upon the results of standard_native_data
 
-            # Step 3 - get estimate for returning to scopus for more info
-            #pubmed will do same as always number of requests!
-            #But nature of the query depends upon the results of standard_native_data
+                if self.complete_search_request_limit < complete_no_requests:
+                    return pubmed_data
+                else:
+                    #split doi list into blocks of 25 (25 per request),
+                    # to reduce url length per length
+                    binned_dois = bin_items(dois_remaining, 25)
 
-            if self.complete_search_request_limit < complete_no_requests:
+                    async def get_paper_data_from_dois(dois):
+                        doi_query_scopus = await get_doi_query_from_list(dois, scopus_query_selector)
+                        return await self.scopus_paper_search(doi_query_scopus)
+                    results = await gather(*list(map(get_paper_data_from_dois, binned_dois)))
+                    concat_results = []
+                    for i in results:
+                        concat_results += i
+                    return pubmed_data + concat_results
+            elif query.selector in self.pubmed_paper_search.available_fields:
+                # Step 1 - get standard results
+                standard_data = await self.scopus_paper_search.get_data_from_native_query(query, standard_native_query)
+                
+                # Step 2 - get pubmed data from dois
+                doi_list_scopus = await get_doi_list_from_data(standard_data)
+                doi_query_pubmed = await get_doi_query_from_list(doi_list_scopus, query.selector)
+                pubmed_data = await self.pubmed_paper_search(doi_query_pubmed)
                 return pubmed_data
+            elif query.selector in self.scopus_paper_search.available_fields:
+                # Step 1 - get full results
+                return await self.scopus_paper_search.get_data_from_native_query(query, full_native_query)
             else:
-
-                #split doi list into blocks of 25 (25 per request),
-                # to reduce url length per length
-                binned_dois = bin_items(dois_remaining, 25)
-
-                async def get_paper_data_from_dois(dois):
-                    doi_query_scopus = await get_doi_query_from_list(dois, scopus_query_selector)
-                    return await self.scopus_paper_search(doi_query_scopus)
-                results = await gather(*list(map(get_paper_data_from_dois, binned_dois)))
-                concat_results = []
-                for i in results:
-                    concat_results += i
-                return pubmed_data + concat_results
-
+                raise SearchNotPossible
+        
         return make_coroutine, metadata
     
     async def _query_to_native(self, query: PaperSearchQuery) -> BaseNativeQuery[List[BasePaperData]]:
@@ -147,9 +181,22 @@ class PaperSearchQueryEngine(
         return await query.coroutine_function()
 
     async def _post_process(self, query: PaperSearchQuery, data: List[BasePaperData]) -> List[BasePaperData]:
+        def merge_papers(paper: List[BasePaperData]) -> BasePaperData:
+            # Not necessary yet as union search currently not possible
+            raise NotImplementedError
         model = BasePaperData.generate_model_from_selector(query.selector)
-        # TODO Figure out data merge - currently duplicating results theoretically
-        return [model.parse_obj(i) for i in data]
+        new_data = []
+        id_log = []
+        for i in data:
+            matching_papers = [j for j in data if j.paper_id == i.paper_id]
+            if len(matching_papers) != 1:
+                new_paper = merge_papers(matching_papers)
+            else:
+                new_paper = matching_papers[0]
+            id_log.append(new_paper.paper_id)
+            new_data.append(new_paper)
+        
+        return new_data
 
 
 class AuthorSearchQueryEngine(

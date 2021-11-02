@@ -45,12 +45,12 @@ paper_search = PaperSearchQuery.parse_obj({
         ]
     },
 
-    'selector': paper_searcher.complete_fields.dict()
-    #'selector': PaperDataSelector.parse_obj({
-    #    'paper_id':{'doi': True},
-    #    'institutions':{'id': True},
-    #    'authors': {'other_institutions': {'id': True}}
-    #})
+    #'selector': paper_searcher.complete_fields.dict()
+    'selector': PaperDataSelector.parse_obj({
+        'paper_id':{'doi': True},
+        'institutions':{'id': True},
+        'authors': {'other_institutions': {'id': True}}
+    })
 })
 inst_search = InstitutionSearchQuery.parse_obj({
     'query':{
