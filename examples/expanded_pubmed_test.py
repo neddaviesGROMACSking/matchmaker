@@ -26,4 +26,5 @@ author_search = AuthorSearchQuery.parse_obj({
 async def main():
 
     return await engine(author_search)
-pub_paper_results = asyncio.run(main())
+pub_author_results = asyncio.run(main())
+print(pub_author_results[0])
