@@ -156,8 +156,6 @@ class BaseSelector(Generic[Selector], BaseModel):
         return overselects
     @classmethod
     def generate_subset_selector(cls, selector: Selector, fields_available: Selector):
-        # Produce a version of selector limited to only the fields available
-
         def make_subset_selector_dict(selector_dict: SelectorDict, available_dict: SelectorDict):
             subset_selector_dict = {}
             for selector_k, selector_v in selector_dict.items():
@@ -187,6 +185,38 @@ class BaseSelector(Generic[Selector], BaseModel):
         fields_available_dict = fields_available.dict()   
         subset_selector_dict = make_subset_selector_dict(selector_dict, fields_available_dict)
         return cls.parse_obj(subset_selector_dict)  
+
+    @classmethod
+    def generate_superset_selector(cls, selector1: Selector, selector2: Selector):
+        def make_superset_selector_dict(dict1: SelectorDict, dict2: SelectorDict):
+            superset_selector_dict = {}
+            for dict1_k, dict1_v in dict1.items():
+                dict2_v = dict2[dict1_k]
+
+                if dict1_v is True and dict2_v is True:
+                    superset_selector_dict[dict1_k] = dict1_v
+                elif dict1_v is True and dict2_v is False:
+                    superset_selector_dict[dict1_k] = dict1_v
+                elif dict1_v is False and dict2_v is True:
+                    superset_selector_dict[dict1_k] = dict2_v
+                elif dict1_v is False and dict2_v is False:
+                    pass
+                elif dict1_v is True and isinstance(dict2_v, dict):
+                    superset_selector_dict[dict1_k] = dict1_v
+                elif dict1_v is False and isinstance(dict2_v, dict):
+                    superset_selector_dict[dict1_k] = dict2_v
+                elif isinstance(dict1_v, dict) and dict2_v is True:
+                    superset_selector_dict[dict1_k] = dict2_v
+                elif isinstance(dict1_v, dict) and dict2_v is False:
+                    superset_selector_dict[dict1_k] = dict1_v
+                elif isinstance(dict1_v, dict) and isinstance(dict2_v, dict):
+                    superset_selector_dict[dict1_k] = make_superset_selector_dict(dict1_v, dict2_v)
+            return superset_selector_dict
+
+        selector1_dict = selector1.dict()
+        selector2_dict = selector2.dict()   
+        superset_selector_dict = make_superset_selector_dict(selector1_dict, selector2_dict)
+        return cls.parse_obj(superset_selector_dict)  
 
     def generate_model(self, base_model: BaseModel, full_model: BaseModel, model_mapper: Dict[str, BaseModel] = {}) -> BaseModel:
         def make_model(model_name, selector_dict, base, fields):

@@ -21,9 +21,10 @@ from pybliometrics.scopus.exception import ScopusQueryError
 from copy import deepcopy
 
 
-def author_query_to_paper_query(query: AuthorSearchQuery, available_fields: AuthorDataSelector) -> PaperSearchQuery:
+def author_query_to_paper_query(query: AuthorSearchQuery, available_fields: AuthorDataSelector, required_fields: AuthorDataSelector) -> PaperSearchQuery:
     #Since author query is a subset of paper query
     new_selector = AuthorDataSelector.generate_subset_selector(query.selector, available_fields)
+    new_selector = AuthorDataSelector.generate_superset_selector(new_selector, required_fields)
     new_query = PaperSearchQuery.parse_obj({
         'query': query.query.dict(),
         'selector': {
@@ -56,11 +57,23 @@ class AuthorSearchQueryEngine(
                 'doi': True
             },
         })
+
+        self.required_fields = AuthorDataSelector.parse_obj({
+            'preferred_name': {
+                'surname': True,
+                'given_names': True
+            },
+            'institution_current': {
+                'name': True,
+                'processed': True
+            },
+        })
+    
     async def _query_to_awaitable(self, query: AuthorSearchQuery):
         if query.selector not in self.available_fields:
             overselected_fields = self.available_fields.get_values_overselected(query.selector)
             raise QueryNotSupportedError(overselected_fields)
-        paper_query = author_query_to_paper_query(query, self.pubmed_paper_search.available_fields.authors)
+        paper_query = author_query_to_paper_query(query, self.pubmed_paper_search.available_fields.authors, self.required_fields)
         native_query = await self.pubmed_paper_search.get_native_query(paper_query)
         async def make_coroutine() -> List[PaperData]:
             papers = await self.pubmed_paper_search.get_data_from_native_query(paper_query, native_query)
@@ -68,10 +81,7 @@ class AuthorSearchQueryEngine(
         return make_coroutine, native_query.metadata
 
     async def _post_process(self, query: AuthorSearchQuery, data: List[PaperData]) -> List[AuthorData]:
-        
-
-
-        
+                
         def query_to_func(body_institution: str, body_author: str):
             def query_to_term(query):
                 def make_string_term(body_string, q_value, operator):
@@ -113,7 +123,6 @@ class AuthorSearchQueryEngine(
                     else:
                         return False
                 for part in inst1:
-
                     if part[1] == 'postcode':
                         #Extract postcodes from other half
                         postcodes2 = [i[0] for i in inst2 if i[1] == 'postcode']
@@ -206,8 +215,8 @@ class AuthorSearchQueryEngine(
                         associated_with_author.append(paper)
                         paper_ids.append(paper.paper_id)
             paper_count = len(paper_ids)
-
-            new_data.append(AuthorData.parse_obj({
+            #TODO Fix given names not appearing
+            new_data.append(model.parse_obj({
                 **author1.dict(),
                 'paper_count': paper_count,
                 'paper_ids': paper_ids
