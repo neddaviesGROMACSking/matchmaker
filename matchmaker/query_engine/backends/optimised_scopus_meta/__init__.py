@@ -18,7 +18,8 @@ from pybliometrics.scopus.utils.constants import SEARCH_MAX_ENTRIES
 from matchmaker.query_engine.backends.tools import TagNotFound, execute_callback_on_tag
 from pybliometrics.scopus.exception import ScopusQueryError
 from copy import deepcopy
-NativeData = TypeVar('NativeData')
+from matchmaker.query_engine.backends.metas import BaseNativeQuery
+
 DictStructure = Dict[str, Union[str, 'ListStructure', 'DictStructure']]
 ListStructure = List[Union[str, 'ListStructure', 'DictStructure']]
 
@@ -35,14 +36,7 @@ def bin_items(items: List[str], bin_limit: int) -> List[List[str]]:
             current_bin_index += 1
     return binned_items
 
-@dataclass
-class BaseNativeQuery(Generic[NativeData], AbstractNativeQuery):
-    coroutine_function: Callable[[], Awaitable[NativeData]]
-    metadata: Dict[str, int]
-    def count_api_calls(self):
-        return sum(self.metadata.values())
-    def count_api_calls_by_method(self, method: str):
-        return self.metadata[method]
+
 
 async def get_doi_list_from_data(papers: List[BasePaperData]) -> List[str]:
     return [paper.paper_id.doi for paper in papers if paper.paper_id.doi is not None]

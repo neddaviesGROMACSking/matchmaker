@@ -190,20 +190,28 @@ class BaseSelector(Generic[Selector], BaseModel):
 
     def generate_model(self, base_model: BaseModel, full_model: BaseModel, model_mapper: Dict[str, BaseModel] = {}) -> BaseModel:
         def make_model(model_name, selector_dict, base, fields):
+            def check_whole_dict_is_value(s_dict: SelectorDict, value: bool):
+                for k, v in s_dict.items():
+                    if isinstance(v, bool):
+                        if v != value:
+                            return False
+                    elif isinstance(v, dict):
+                        inner_value = check_whole_dict_is_value(v, value)
+                        if inner_value != value:
+                            return False
+                return True
             ellipsis_type = type(...)
             new_attrs: Dict[str, Tuple[type,Union[type, ellipsis_type]]] = {}
             for name, selector_value in selector_dict.items():
-                if isinstance(selector_value, bool):
-                    if selector_value:
-                        model_field = fields[name]
-                        field_type = model_field.outer_type_
-                        if model_field.required:
-                            field_default = ...
-                        else:
-                            field_default = model_field.default
-                        new_attrs[name] = (field_type, field_default)
-                elif isinstance(selector_value, dict):
-
+                if isinstance(selector_value, bool) and selector_value:
+                    model_field = fields[name]
+                    field_type = model_field.outer_type_
+                    if model_field.required:
+                        field_default = ...
+                    else:
+                        field_default = model_field.default
+                    new_attrs[name] = (field_type, field_default)
+                elif isinstance(selector_value, dict) and not check_whole_dict_is_value(selector_value, False):
                     model_field = fields[name]
                     submodel_type, sub_model_name, submodel_type_func = extract_sub_model(model_field)
 
@@ -224,8 +232,6 @@ class BaseSelector(Generic[Selector], BaseModel):
 
                     new_field_type = submodel_type_func(sub_model)
                     new_attrs[name] = (new_field_type, field_default)
-                else:
-                    raise TypeError('Unsupported type in selector')
             return create_model(model_name, **new_attrs, __base__ = base)
         fields = full_model.__fields__
         selector_dict = self.dict()
