@@ -395,9 +395,11 @@ class AuthorSearchQueryEngine(
         self.institution_token = institution_token
         self.available_fields = AuthorDataSelector.parse_obj({
             'id':True,
-            'surname': True,
-            'initials': True,
-            'given_names': True,
+            'preferred_name':{
+                'surname': True,
+                'initials': True,
+                'given_names': True,
+            },
             'subjects': True,
             'institution_current': {
                 'name': True,
@@ -405,7 +407,6 @@ class AuthorSearchQueryEngine(
                 'processed': True
             }
         })
-        
         self.possible_searches = [self.available_fields]
            
         super().__init__(rate_limiter, *args, **kwargs)
@@ -416,7 +417,7 @@ class AuthorSearchQueryEngine(
         client: NewAsyncClient
     ) -> Tuple[Callable[[NewAsyncClient], Awaitable[List[ScopusAuthorSearchResult]]], Dict[str, int]]:
         if query.selector not in self.available_fields:
-            overselected_fields = query.selector.get_values_overselected(self.available_fields)
+            overselected_fields = self.available_fields.get_values_overselected(query.selector)
             raise QueryNotSupportedError(overselected_fields)
         author_search_query = author_query_to_scopus_author(query)
         cache_remaining = await get_author_query_remaining_in_cache()
@@ -511,7 +512,7 @@ class InstitutionSearchQueryEngine(
     ) -> Tuple[Callable[[NewAsyncClient], Awaitable[List[AffiliationSearchResult]]], Dict[str, int]]:
         
         if query.selector not in self.available_fields:
-            overselected_fields = query.selector.get_values_overselected(self.available_fields)
+            overselected_fields = self.available_fields.get_values_overselected(query.selector)
             raise QueryNotSupportedError(overselected_fields)
         
         affiliation_search_query = institution_query_to_affiliation(query)
