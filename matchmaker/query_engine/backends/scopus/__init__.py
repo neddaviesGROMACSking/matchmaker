@@ -417,7 +417,8 @@ class AuthorSearchQueryEngine(
                 'name': True,
                 'id': True,
                 'processed': True
-            }
+            },
+            'paper_count': True
         })
         self.possible_searches = [self.available_fields]
            
@@ -455,11 +456,11 @@ class AuthorSearchQueryEngine(
             new_author_dict = {}
             if AuthorDataSelector(id = True) in query.selector:
                 new_author_dict['id'] = author_dict['eid'].split('-')[-1]
-            if any([
-                AuthorDataSelector(surname = True) in query.selector,
-                AuthorDataSelector(initials = True) in query.selector,
-                AuthorDataSelector(given_names = True) in query.selector
-            ]):
+            if query.selector.any_of_fields(AuthorDataSelector(
+                surname = True,
+                initials = True,
+                given_names = True
+            )):
                 preferred_name = {}
                 if AuthorDataSelector(surname = True) in query.selector:
                     preferred_name['surname'] = author_dict['surname']
@@ -485,18 +486,27 @@ class AuthorSearchQueryEngine(
                 else:
                     subjects = []
                 new_author_dict['subjects'] = subjects
-            
-            processed = []
-            if author_dict['city'] is not None:
-                processed.append((author_dict['city'], 'city'))
-            if author_dict['country'] is not None:
-                processed.append((author_dict['country'], 'country'))
-            new_institution = {
-                'name': author_dict['affiliation'],
-                'id': author_dict['affiliation_id'],
-                'processed': processed
-            }
-            new_author_dict['institution_current'] = new_institution
+
+            if query.selector.any_of_fields(AuthorDataSelector.parse_obj({
+                'institution_current': {
+                    'name': True,
+                    'id': True,
+                    'processed': True
+                }
+            })):
+                new_institution = {}
+                if AuthorDataSelector.parse_obj({'institution_current': {'name': True}}) in query.selector:
+                    new_institution['name'] = author_dict['affiliation']
+                if AuthorDataSelector.parse_obj({'institution_current': {'id': True}}) in query.selector:
+                    new_institution['id'] = author_dict['affiliation_id']
+                if AuthorDataSelector.parse_obj({'institution_current': {'processed': True}}) in query.selector:
+                    processed = []
+                    if author_dict['city'] is not None:
+                        processed.append((author_dict['city'], 'city'))
+                    if author_dict['country'] is not None:
+                        processed.append((author_dict['country'], 'country'))
+                        new_institution['processed'] = processed
+                new_author_dict['institution_current'] = new_institution
             new_authors.append(model.parse_obj(new_author_dict))
         return new_authors
 
