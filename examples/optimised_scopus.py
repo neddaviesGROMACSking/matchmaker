@@ -73,7 +73,7 @@ author_search = AuthorSearchQuery.parse_obj({
 
 op_scopus_author_engine = op_scopus_backend.author_search_engine()
 async def main():
-    return await op_scopus_query_engine(paper_search)
+    #return await op_scopus_query_engine(paper_search)
     return await op_scopus_author_engine(author_search)
 
 res = asyncio.run(main())

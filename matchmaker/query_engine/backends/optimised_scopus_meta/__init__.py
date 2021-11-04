@@ -1,8 +1,10 @@
 from matchmaker.query_engine.backends.pubmed import PubmedBackend
-from matchmaker.query_engine.backends.scopus import ScopusBackend, InstitutionSearchQueryEngine
-from matchmaker.query_engine.backends.scopus.api import Auth
+from matchmaker.query_engine.backends.scopus import ScopusBackend
+from matchmaker.query_engine.backends.scopus import PaperSearchQueryEngine as ScopusPaperSearchQueryEngine
+from matchmaker.query_engine.backends.scopus import AuthorSearchQueryEngine as ScopusAuthorSearchQueryEngine
+from matchmaker.query_engine.backends.scopus import InstitutionSearchQueryEngine as ScopusInstitutionSearchQueryEngine
 
-from matchmaker.query_engine.data_types import AuthorData, PaperData, InstitutionData, BasePaperData
+from matchmaker.query_engine.data_types import AuthorData, PaperData, InstitutionData, BasePaperData, BaseAuthorData
 from matchmaker.query_engine.query_types import AuthorSearchQuery, PaperSearchQuery, InstitutionSearchQuery
 from matchmaker.query_engine.selector_types import AuthorDataAllSelected, PaperDataSelector, PaperDataAllSelected, AuthorDataSelector
 from matchmaker.query_engine.slightly_less_abstract import AbstractNativeQuery
@@ -165,13 +167,6 @@ class PaperSearchQueryEngine(BasePaperSearchQueryEngine[List[BasePaperData]]):
                 raise SearchNotPossible
         
         return make_coroutine, metadata
-    
-    async def _query_to_native(self, query: PaperSearchQuery) -> BaseNativeQuery[List[BasePaperData]]:
-        awaitable, metadata = await self._query_to_awaitable(query)
-        return BaseNativeQuery(awaitable, metadata)
-    
-    async def _run_native_query(self, query: BaseNativeQuery[List[BasePaperData]]) -> List[BasePaperData]:
-        return await query.coroutine_function()
 
     async def _post_process(self, query: PaperSearchQuery, data: List[BasePaperData]) -> List[BasePaperData]:
         def merge_papers(paper: List[BasePaperData]) -> BasePaperData:
@@ -192,12 +187,15 @@ class PaperSearchQueryEngine(BasePaperSearchQueryEngine[List[BasePaperData]]):
         return new_data
 
 
-class AuthorSearchQueryEngine(BaseAuthorSearchQueryEngine[List[AuthorData]]):
+class AuthorSearchQueryEngine(BaseAuthorSearchQueryEngine[List[BaseAuthorData]]):
+    scopus_paper_search: ScopusPaperSearchQueryEngine
+    scopus_author_search: ScopusAuthorSearchQueryEngine
+    scopus_institution_search: ScopusInstitutionSearchQueryEngine
     def __init__(
         self,
-        scopus_paper_search,
-        scopus_author_search,
-        scopus_institution_search
+        scopus_paper_search: ScopusPaperSearchQueryEngine,
+        scopus_author_search: ScopusAuthorSearchQueryEngine,
+        scopus_institution_search: ScopusInstitutionSearchQueryEngine
     ) -> None:
         self.max_entries = SEARCH_MAX_ENTRIES
         self.scopus_paper_search = scopus_paper_search
@@ -222,26 +220,7 @@ class AuthorSearchQueryEngine(BaseAuthorSearchQueryEngine[List[AuthorData]]):
             'paper_count': True,
             'paper_ids': True
         })
-        self.possible_searches = [
-            AuthorDataSelector.parse_obj({
-                'id':True,
-                'preferred_name':{
-                    'surname': True,
-                    'initials': True,
-                    'given_names': True,
-                },
-                'subjects': {
-                    'name': True,
-                    'paper_count': True
-                },
-                'institution_current': {
-                    'name': True,
-                    'id': True,
-                    'processed': True
-                },
-                'paper_count': True
-            }),
-            AuthorDataSelector.parse_obj({
+        self.paper_and_institution_fields = AuthorDataSelector.parse_obj({
                 'id': True,
                 'preferred_name': {
                     'surname': True,
@@ -254,7 +233,10 @@ class AuthorSearchQueryEngine(BaseAuthorSearchQueryEngine[List[AuthorData]]):
                 },
                 'paper_count': True,
                 'paper_ids': True
-            }),
+            })
+        self.possible_searches = [
+            self.scopus_author_search.available_fields,
+            self.paper_and_institution_fields,
             AuthorDataSelector.parse_obj({
                 'id': True,
                 'preferred_name': {
@@ -277,25 +259,30 @@ class AuthorSearchQueryEngine(BaseAuthorSearchQueryEngine[List[AuthorData]]):
         ]
 
 
-    async def _query_to_awaitable(self, query: AuthorSearchQuery) -> Tuple[Callable[[], Awaitable[List[AuthorData]]], Dict[str, int]]:
+    async def _query_to_awaitable(self, query: AuthorSearchQuery) -> Tuple[Callable[[], Awaitable[List[BaseAuthorData]]], Dict[str, int]]:
         """
         if one of the standard fields is asked for, 
         """
-        native_paper_query = await self.scopus_paper_search.get_native_query(query) # actual_request
-        native_paper_query_request_no = native_paper_query.metadata['scopus_search']
-        try:
-            native_author_query = await self.scopus_author_search.get_native_query(query) # actual_request
-        except TagNotFound:
-            native_author_query = None
-        except ScopusQueryError:
-            native_author_query = None
-        direct_author_search = native_author_query is not None and native_author_query.metadata['author_search'] < SEARCH_MAX_ENTRIES/25
-        if direct_author_search and native_author_query is not None:
-            metadata = native_author_query.metadata
-            metadata['institution_search'] = 1
+        def author_query_to_paper_query(query: AuthorSearchQuery) -> PaperSearchQuery:
+            raise NotImplementedError
+
+        if query.selector in self.scopus_author_search.available_fields:
+            try:
+                native_author_query = await self.scopus_author_search.get_native_query(query) # actual_request
+            except ScopusQueryError:
+                native_author_query = None
         else:
+            native_author_query = None
+        
+        if (native_author_query is not None) and (native_author_query.metadata['author_search'] < SEARCH_MAX_ENTRIES/25):
+            metadata = native_author_query.metadata
+        else:
+            paper_query = author_query_to_paper_query(query)
+            native_paper_query = await self.scopus_paper_search.get_native_query(paper_query) # actual_request
+            native_paper_query_request_no = native_paper_query.metadata['scopus_search']
             metadata = native_paper_query.metadata
-        follow_up_necessary = False
+            metadata['institution_search'] = 1
+
 
         async def make_coroutine() -> List[AuthorData]:
             def get_unique_authors(query: AuthorSearchQuery, papers: List[BasePaperData], inst_mapper: List[Tuple[Any, List[InstitutionData]]]) -> List[AuthorData]:
@@ -441,14 +428,14 @@ class AuthorSearchQueryEngine(BaseAuthorSearchQueryEngine[List[AuthorData]]):
                 return inst_mapper
 
 
-            if direct_author_search:
-                results = await self.scopus_author_search.get_data_from_native_query(native_author_query) # actual_request
+            if (native_author_query is not None) and (native_author_query.metadata['author_search'] < SEARCH_MAX_ENTRIES/25):
+                results = await self.scopus_author_search.get_data_from_native_query(query, native_author_query) # actual_request
                 new_results = results
             else:
-                results = await self.scopus_paper_search.get_data_from_native_query(native_paper_query) # actual_request
+                results = await self.scopus_paper_search.get_data_from_native_query(paper_query, native_paper_query) # actual_request
                 inst_mapper = await get_institutions_from_query(query) # built in actual_request
                 new_results = get_unique_authors(query, results, inst_mapper)
-                if follow_up_necessary:
+                if query.selector not in self.paper_and_institution_fields:
                     author_ids = [author.id for author in new_results if author.id is not None]
                     binned_author_ids = bin_items(author_ids, 25)
                     new_results = []
@@ -470,15 +457,10 @@ class AuthorSearchQueryEngine(BaseAuthorSearchQueryEngine[List[AuthorData]]):
             return new_results
         return make_coroutine, metadata
 
-    async def _query_to_native(self, query: AuthorSearchQuery) -> BaseNativeQuery[List[AuthorData]]:
-        awaitable, metadata = await self._query_to_awaitable(query)
-        return BaseNativeQuery(awaitable, metadata)
-    
-    async def _run_native_query(self, query: BaseNativeQuery[List[AuthorData]]) -> List[AuthorData]:
-        return await query.coroutine_function()
-
-    async def _post_process(self, query: AuthorSearchQuery, data: List[AuthorData]) -> List[AuthorData]:
-        return data
+    async def _post_process(self, query: AuthorSearchQuery, data: List[BaseAuthorData]) -> List[BaseAuthorData]:
+        model = BaseAuthorData.generate_model_from_selector(query.selector)
+        output = [model.parse_obj(i.dict()) for i in data]
+        return output
 
 
 class OptimisedScopusBackend(Backend):
@@ -503,5 +485,5 @@ class OptimisedScopusBackend(Backend):
             self.scopus_backend.institution_search_engine()
         )
     
-    def institution_search_engine(self) -> InstitutionSearchQueryEngine:
+    def institution_search_engine(self) -> ScopusInstitutionSearchQueryEngine:
         return self.scopus_backend.institution_search_engine()
