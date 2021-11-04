@@ -2,7 +2,7 @@ from asyncio import gather, get_running_loop
 from copy import copy, deepcopy
 from dataclasses import replace
 from pprint import pprint
-from typing import Annotated, Awaitable, Callable, Dict, List, Tuple, Union
+from typing import Annotated, Awaitable, Callable, Dict, List, Tuple, Union, Optional, Any
 
 from aiohttp import ClientSession
 from matchmaker.query_engine.backend import Backend
@@ -169,12 +169,11 @@ async def process_paper_institutions(i):
 class PaperSearchQueryEngine(
         BasePaperSearchQueryEngine[List[PubmedNativeData]]):
     api_key:str
-    def __init__(self, api_key, rate_limiter: RateLimiter = RateLimiter(), *args, **kwargs):
+    def __init__(self, api_key: str, rate_limiter: RateLimiter = RateLimiter(), *args, **kwargs):
         self.api_key = api_key
         esearch_field_bools = {'paper_id':{'pubmed_id':True}}
         efetch_field_bools = {
             'paper_id': {
-                'pubmed_id': True,
                 'doi': True
             },
             'title': True,
@@ -192,24 +191,46 @@ class PaperSearchQueryEngine(
             'keywords': True,
             'topics': True
         }
-        esearch_fields = PaperDataSelector.parse_obj(esearch_field_bools)
-        esearch_efetch_fields = PaperDataSelector.parse_obj(efetch_field_bools)
-        esearch_elink_refs_fields = PaperDataSelector.parse_obj({
-            **esearch_field_bools,
+        self.esearch_fields = PaperDataSelector.parse_obj(esearch_field_bools)
+        self.efetch_fields = PaperDataSelector.parse_obj(efetch_field_bools)
+        self.elink_refs_fields = PaperDataSelector.parse_obj({
             'references': esearch_field_bools
         })
-        esearch_elink_citeds_fields = PaperDataSelector.parse_obj({
-            **esearch_field_bools,
+        self.elink_refs_details_fields = PaperDataSelector.parse_obj({
+            'references': efetch_field_bools
+        })
+        self.elink_citeds_fields = PaperDataSelector.parse_obj({
             'cited_by': esearch_field_bools
         })
+        self.elink_citeds_details_fields = PaperDataSelector.parse_obj({
+            'cited_by': efetch_field_bools
+        })
+
         self.possible_searches = [
-            esearch_fields,
-            esearch_efetch_fields,
-            esearch_elink_refs_fields,
-            esearch_elink_citeds_fields
+            self.esearch_fields,
+            self.efetch_fields,
+            self.elink_refs_fields,
+            self.elink_citeds_fields
         ]
         self.available_fields = PaperDataSelector.parse_obj({
-            **efetch_field_bools,
+            'paper_id': {
+                'doi': True,
+                'pubmed_id':True
+            },
+            'title': True,
+            'authors': {
+                'preferred_name': True,
+                'institution_current': {
+                    'name': True,
+                    'processed': True
+                }
+            },
+            'year': True,
+            'source_title': True,
+            'source_title_abr': True,
+            'abstract': True,
+            'keywords': True,
+            'topics': True,
             'references': efetch_field_bools,
             'cited_by': efetch_field_bools
         })
@@ -222,80 +243,43 @@ class PaperSearchQueryEngine(
         ], 
         Dict[str,int]
     ]:
-        split_factor = 9
         metadata = {
-            'efetch': 1+split_factor,
             'esearch': 1,
-            'elink': 2
+            'efetch': 0,
+            'elink': 0
         }
         if query.selector in self.available_fields:
-            # TODO Optimise requests based on fields selected
-            pass
+            if query.selector.any_of_fields(self.efetch_fields):
+                metadata['esearch'] += 1
+            
+            if query.selector.any_of_fields(self.elink_refs_fields) or query.selector.any_of_fields(self.elink_refs_details_fields):
+                metadata['elink'] += 1
+                if query.selector.any_of_fields(self.elink_refs_details_fields):
+                    metadata['efetch'] += 1
+            
+            if query.selector.any_of_fields(self.elink_citeds_fields) or query.selector.any_of_fields(self.elink_citeds_details_fields):
+                metadata['elink'] += 1
+                if query.selector.any_of_fields(self.elink_citeds_details_fields):
+                    metadata['efetch'] += 1
+
         else:
             overselected_fields = self.available_fields.get_values_overselected(query.selector)
             raise QueryNotSupportedError(overselected_fields)
         pubmed_search_query = paper_query_to_esearch(query)
 
         async def make_coroutine(client: ClientSession) -> List[PubmedNativeData]:
-            async def esearch_on_query_set_future(id_list_future, query, client):
-
-                output = await esearch_on_query(query, client, api_key=self.api_key)
-                id_list = output.pubmed_id_list
-                id_list_future.set_result(id_list)
-                return id_list_future
-            
-            async def efetch_on_id_list_resolve_id(id_list_future, client):
-                await id_list_future
-                id_list = id_list_future.result()
-                result = await efetch_on_id_list(PubmedEFetchQuery(pubmed_id_list = id_list), client, api_key=self.api_key)
-                return result
-
-            async def efetch_on_elink_resolve_id(id_list_future, fetch_list_future, linkname, client):
-                def id_mapper_to_unique_list(id_mapper):
-                    unique_ids = []
-                    for start_id, linked_ids in id_mapper.items():
-                        if linked_ids is not None:
-                            for linked_id in linked_ids:
-                                if linked_id not in unique_ids:
-                                    unique_ids.append(linked_id)
-                    return unique_ids
-                
-                await id_list_future
-                id_list = id_list_future.result()
-
-                output = await elink_on_id_list(PubmedELinkQuery(pubmed_id_list = id_list, linkname = linkname), client, api_key=self.api_key)
-                
-                id_mapper = output.id_mapper
-                unique_fetch_list = id_mapper_to_unique_list(id_mapper)
-                fetch_list_future.set_result(unique_fetch_list)
-                return id_mapper
-
-            async def redistribute_fetches(*list_futures, bin_futures = None, split_factor = None):
-                if bin_futures is None:
-                    raise ValueError( 'No bin_futures')
-                if split_factor is None:
-                    raise ValueError('No split factor')
-                
-                total_fetch_list = []
-                for i in list_futures:
-                    await i
-                    fetch_list = i.result()
-                    total_fetch_list += fetch_list
-                unique_total_fetch_list = list(set(total_fetch_list))
-                fetch_length = len(unique_total_fetch_list)
-                bin_size = fetch_length // split_factor
-                bins = []
-                for i in range(split_factor):
-                    if i == split_factor -1:
-                        bins.append(unique_total_fetch_list[bin_size*i:len(unique_total_fetch_list)])
-                    else:
-                        bins.append(unique_total_fetch_list[bin_size*i:bin_size*(i+1)])
-
-                for counter, j in enumerate(bin_futures):
-                    bin_item = bins[counter]
-                    j.set_result(bin_item)
-            
-            async def get_papers_from_index(id_mapper, sub_paper_index):
+            async def id_mapper_to_unique_list(id_mapper: Dict[str, Optional[List[str]]]) -> List[str]:
+                unique_ids = []
+                for linked_ids in id_mapper.values():
+                    if linked_ids is not None:
+                        for linked_id in linked_ids:
+                            if linked_id not in unique_ids:
+                                unique_ids.append(linked_id)
+                return unique_ids
+            async def get_papers_from_index(
+                id_mapper: Dict[str, Optional[List[str]]], 
+                sub_paper_index: Dict[str, PubmedEFetchData]
+            ) -> Dict[str, List[PubmedEFetchData]]:
                 id_mapper_papers = {}
                 for search_id, id_list in id_mapper.items():
                     if id_list is not None:
@@ -303,66 +287,107 @@ class PaperSearchQueryEngine(
                     else:
                         id_mapper_papers[search_id] = []
                 return id_mapper_papers
+
+
+            """
+            If you asked for anything: esearch
+            If you asked for fetch field: efetch
+            If you asked for refs doi or details: elink(refs)
+                if refs details: efetch(refs)
+            If you asked for citeds doi or details: elink(cited)
+                if citeds details: efetch(citeds)
+            """
+
+            search_result = await esearch_on_query(pubmed_search_query, client, api_key=self.api_key)
+            if query.selector.any_of_fields(self.efetch_fields):
+                fetch_result_raw = await efetch_on_id_list(PubmedEFetchQuery(pubmed_id_list = search_result.pubmed_id_list), client, api_key=self.api_key)
+                fetch_result = {i.paper_id.pubmed: i for i in fetch_result_raw}
+            else:
+                fetch_result = None
+            if query.selector.any_of_fields(self.elink_refs_fields) or query.selector.any_of_fields(self.elink_refs_details_fields):
+                link_result_refs_raw = await elink_on_id_list(
+                    PubmedELinkQuery(
+                        pubmed_id_list = search_result.pubmed_id_list, 
+                        linkname = 'pubmed_pubmed_refs'
+                    ),
+                    client, 
+                    api_key=self.api_key
+                )
+                link_result_refs = link_result_refs_raw.id_mapper
+                if query.selector.any_of_fields(self.elink_refs_details_fields):
+                    ref_unique_fetch_list = await id_mapper_to_unique_list(link_result_refs)
+                    fetch_result_refs_raw = await efetch_on_id_list(PubmedEFetchQuery(pubmed_id_list = ref_unique_fetch_list), client, api_key=self.api_key)
+                    sub_paper_index_refs = {i.paper_id.pubmed: i for i in fetch_result_refs_raw}
+                    fetch_result_refs = await get_papers_from_index(link_result_refs, sub_paper_index_refs)
+                else:
+                    fetch_result_refs = None
             
-            original_fetch_ids_future = get_running_loop().create_future()
-            ref_fetch_list_future = get_running_loop().create_future()
-            cited_fetch_list_future = get_running_loop().create_future()
+            else:
+                link_result_refs = None
+                fetch_result_refs = None
 
-            bin_futures = []
-            for j in range(split_factor):
-                bin_futures.append(get_running_loop().create_future())
-            
-            awaitables = []
 
-            esearch_await = esearch_on_query_set_future(original_fetch_ids_future, pubmed_search_query, client)
-            efetch_await = efetch_on_id_list_resolve_id(original_fetch_ids_future, client)
+            if query.selector.any_of_fields(self.elink_citeds_fields) or query.selector.any_of_fields(self.elink_citeds_details_fields):
+                link_result_citeds_raw = await elink_on_id_list(
+                    PubmedELinkQuery(
+                        pubmed_id_list = search_result.pubmed_id_list, 
+                        linkname = 'pubmed_pubmed_citedin'
+                    ),
+                    client, 
+                    api_key=self.api_key
+                )
+                link_result_citeds = link_result_citeds_raw.id_mapper
+                if query.selector.any_of_fields(self.elink_citeds_details_fields):
+                    cited_by_unique_fetch_list = await id_mapper_to_unique_list(link_result_citeds)
+                    fetch_result_citeds_raw = await efetch_on_id_list(PubmedEFetchQuery(pubmed_id_list = cited_by_unique_fetch_list), client, api_key=self.api_key)
+                    sub_paper_index_cited = {i.paper_id.pubmed: i for i in fetch_result_citeds_raw}
+                    fetch_result_citeds = await get_papers_from_index(link_result_citeds, sub_paper_index_cited)
+                else:
+                    fetch_result_citeds = None
+            else:
+                link_result_citeds = None
+                fetch_result_citeds = None
 
-            references_set_await = efetch_on_elink_resolve_id(
-                original_fetch_ids_future,
-                ref_fetch_list_future,
-                'pubmed_pubmed_refs', 
-                client
-            )
-            cited_by_set_await = efetch_on_elink_resolve_id(
-                original_fetch_ids_future, 
-                cited_fetch_list_future, 
-                'pubmed_pubmed_citedin', 
-                client
-            )
 
-            redistribute_await = redistribute_fetches(
-                ref_fetch_list_future, 
-                cited_fetch_list_future, 
-                bin_futures = bin_futures,
-                split_factor=split_factor
-            )
-            awaitables += [esearch_await, efetch_await, references_set_await, cited_by_set_await, redistribute_await]
-            for i in bin_futures:
-                awaitables.append(efetch_on_id_list_resolve_id(i,client))
-
-            gather_output = await gather(
-                *awaitables
-            )
-            listed_gather_out = list(gather_output)
-            esearch_out, papers, references_mapper, cited_by_mapper, redist_out = listed_gather_out[0:5]
-            sub_papers = listed_gather_out[5: len(listed_gather_out)]
-            new_sub_papers = []
-            for i in sub_papers:
-                new_sub_papers += i
-            
-            sub_paper_index = {i.paper_id.pubmed: i for i in new_sub_papers}
-            references_set, cited_by_set = await gather(
-                get_papers_from_index(references_mapper, sub_paper_index),
-                get_papers_from_index(cited_by_mapper, sub_paper_index)
-            )
             native_papers = []
-            for paper in papers:
-                pubmed_id = paper.paper_id.pubmed
-                native_paper = PubmedNativeData.parse_obj({
-                    **paper.dict(),
-                    'references': references_set[pubmed_id],
-                    'cited_by': cited_by_set[pubmed_id]
-                })
+            for pubmed_id in search_result.pubmed_id_list:
+                native_data_dict: Dict[str, Any]
+                if fetch_result is None:
+                    native_data_dict = {'paper_id': {'pubmed': pubmed_id}}
+                else:
+                    native_data_dict = fetch_result[pubmed_id].dict()
+                
+                if link_result_citeds is not None:
+                    if fetch_result_citeds is None:
+                        references = []
+                        relevant_citeds = link_result_citeds[pubmed_id]
+                        if relevant_citeds is not None:
+                            for i in relevant_citeds:
+                                references.append({'paper_id': {'pubmed': i}})
+                            native_data_dict['references'] = references
+                    else:
+                        references = []
+                        relevant_citeds = fetch_result_citeds[pubmed_id]
+                        for i in relevant_citeds:
+                            native_data_dict['references'] = i.dict()
+                    native_data_dict['references'] = references
+
+                if link_result_refs is not None:
+                    if fetch_result_refs is None:
+                        references = []
+                        relevant_refs = link_result_refs[pubmed_id]
+                        if relevant_refs is not None:
+                            for i in relevant_refs:
+                                references.append({'paper_id': {'pubmed': i}})
+                            native_data_dict['references'] = references
+                    else:
+                        references = []
+                        relevant_refs = fetch_result_refs[pubmed_id]
+                        for i in relevant_refs:
+                            native_data_dict['references'] = i.dict()
+                    native_data_dict['references'] = references
+
+                native_paper = PubmedNativeData.parse_obj(native_data_dict)
                 native_papers.append(native_paper)
 
             return native_papers
@@ -372,16 +397,17 @@ class PaperSearchQueryEngine(
     async def _post_process(self, query: PaperSearchQuery, data: List[PubmedNativeData]) -> List[PaperData]:
         def process_sub_paper_data(data_dict, selector: SubPaperDataSelector):
             new_data_dict = {}
-            doi_selected = SubPaperDataSelector.parse_obj({'paper_id':{'doi':True}})
-            pmid_selected = SubPaperDataSelector.parse_obj({'paper_id':{'pubmed_id':True}})
-            if any([
-                doi_selected in selector,
-                pmid_selected in selector
-            ]):
+
+            if selector.any_of_fields(SubPaperDataSelector.parse_obj(
+                {'paper_id':{
+                    'doi': True,
+                    'pubmed_id':True
+                }}
+            )):
                 paper_id = {}
-                if doi_selected in selector:
+                if SubPaperDataSelector.parse_obj({'paper_id':{'doi':True}}) in selector:
                     paper_id['doi'] = data_dict['paper_id']['doi']
-                if pmid_selected in selector:
+                if SubPaperDataSelector.parse_obj({'paper_id':{'pubmed_id':True}}) in selector:
                     paper_id['pubmed_id'] = data_dict['paper_id']['pubmed']
 
                 new_data_dict['paper_id'] = paper_id
@@ -394,83 +420,93 @@ class PaperSearchQueryEngine(
                 new_data_dict['year'] = data_dict['year']
 
 
-
-            surname_selected = SubPaperDataSelector.parse_obj({
-                'authors':{
-                    'preferred_name':{
-                        'surname': True
+            if selector.any_of_fields(
+                SubPaperDataSelector.parse_obj({
+                    'authors':{
+                        'preferred_name':{
+                            'given_names': True,
+                            'surname': True,
+                            'initials': True
+                        },
+                        'institution_current':{
+                            'name': True,
+                            'processed': True
+                        }
                     }
-                }
-            })
-            given_names_selected = SubPaperDataSelector.parse_obj({
-                'authors':{
-                    'preferred_name':{
-                        'given_names': True
-                    }
-                }
-            })
-            initials_selected = SubPaperDataSelector.parse_obj({
-                'authors':{
-                    'preferred_name':{
-                        'initials': True
-                    }
-                }
-            })
-            current_inst_name_selected = SubPaperDataSelector.parse_obj({
-                'authors':{
-                    'institution_current':{
-                        'name': True
-                    }
-                }
-            })
-            current_inst_proc_selected = SubPaperDataSelector.parse_obj({
-                'authors':{
-                    'institution_current':{
-                        'processed': True
-                    }
-                }
-            })
-
-            if any([
-                surname_selected in selector,
-                given_names_selected in selector,
-                initials_selected in selector,
-                current_inst_name_selected in selector,
-                current_inst_proc_selected in selector
-            ]):
+                })
+            ):
                 new_authors = []
                 for author in data_dict['author_list']:
                     author_root = author
                     new_author = {}
-                    if any([
-                        surname_selected in selector,
-                        given_names_selected in selector,
-                        initials_selected in selector,
-                    ]):
+                    if selector.any_of_fields(SubPaperDataSelector.parse_obj({
+                        'authors':{
+                            'preferred_name':{
+                                'surname': True,
+                                'given_names': True,
+                                'initials': True
+                            }
+                        }
+                    })):
                         new_name = {}
-                        if surname_selected in selector:
+                        if SubPaperDataSelector.parse_obj({
+                            'authors':{
+                                'preferred_name':{
+                                    'surname': True
+                                }
+                            }
+                        }) in selector:
                             if 'last_name' in author_root:
                                 new_name['surname'] = author_root['last_name']
                             else:
                                 new_name['surname'] = author_root['collective_name']
-                        if given_names_selected in selector:
+                        if SubPaperDataSelector.parse_obj({
+                            'authors':{
+                                'preferred_name':{
+                                    'given_names': True
+                                }
+                            }
+                        }) in selector:
                             if 'given_names' in author_root:
                                 new_name['given_names'] = author_root['fore_name']
                             else:
                                 new_name['given_names'] = None
-                        if initials_selected in selector:
+                        if SubPaperDataSelector.parse_obj({
+                            'authors':{
+                                'preferred_name':{
+                                    'initials': True
+                                }
+                            }
+                        }) in selector:
                             if 'initials' in author_root:
                                 new_name['initials'] = author_root['initials']
                         new_author['preferred_name'] = new_name
-                    if any([
-                        current_inst_name_selected in selector,
-                        current_inst_proc_selected in selector
-                    ]):
+                    
+                    if selector.any_of_fields(SubPaperDataSelector.parse_obj({
+                            'authors':{
+                                'institution_current':{
+                                    'name': True,
+                                    'processed': True
+                                }
+                            }
+                    })):
                         new_institution = {}
                         institution = author_root['institution']
-                        if current_inst_name_selected in selector:
+                        if SubPaperDataSelector.parse_obj({
+                            'authors':{
+                                'institution_current':{
+                                    'name': True
+                                }
+                            }
+                        }) in selector:
                             new_institution['name'] = institution
-                        if current_inst_proc_selected in selector:
+                        if SubPaperDataSelector.parse_obj({
+                            'authors':{
+                                'institution_current':{
+                                    'processed': True
+                                }
+                            }
+                        }) in selector:
                             if institution is None:
                                 new_institution['processed'] = None
                             else:
@@ -525,6 +561,7 @@ class PaperSearchQueryEngine(
             if SubPaperDataSelector(keywords = True) in selector:
                 new_data_dict['keywords'] = data_dict['keywords']
             return new_data_dict
+        
         selector = query.selector
         model = BasePaperData.generate_model_from_selector(selector)
         sub_paper_selector = SubPaperDataSelector.parse_obj(selector.dict())
@@ -576,9 +613,6 @@ class PaperSearchQueryEngine(
         for i in data:
             new_data.append(process_paper_data(i))
         return new_data
-
-
-
 
 
 
