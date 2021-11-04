@@ -112,6 +112,49 @@ class BaseSelector(Generic[Selector], BaseModel):
         item_dict = item.dict()
         return s_dict1_in_s_dict2(item_dict, self_dict)
 
+    def any_of_fields(self, relevant_fields: Selector) -> bool:
+        def any_of_fields_inner(selector_dict: SelectorDict, relevant_fields_dict: SelectorDict) -> bool:
+            def check_any_of_dict_is_value(s_dict: SelectorDict, value: bool):
+                for k, v in s_dict.items():
+                    if isinstance(v, bool):
+                        if v == value:
+                            return True
+                    elif isinstance(v, dict):
+                        inner_value = check_any_of_dict_is_value(v, value)
+                        if inner_value:
+                            return True
+                return False
+            for k, self_v in selector_dict.items():
+                item_v =  relevant_fields_dict[k]
+                if self_v is True and item_v is True:
+                    return True
+                elif self_v is True and item_v is False:
+                    pass
+                elif self_v is False and item_v is True:
+                    pass
+                elif self_v is False and item_v is False:
+                    pass
+                elif self_v is True and isinstance(item_v, dict):
+                    item_v_is_true = check_any_of_dict_is_value(item_v, True)
+                    if item_v_is_true:
+                        return True
+                elif self_v is False and isinstance(item_v, dict):
+                    pass
+                elif isinstance(self_v, dict) and item_v is True:
+                    self_v_is_true = check_any_of_dict_is_value(self_v, True)
+                    if self_v_is_true:
+                        return True
+                elif isinstance(self_v, dict) and item_v is False:
+                    pass
+                elif isinstance(self_v, dict) and isinstance(item_v, dict):
+                    any_fields_selected = any_of_fields_inner(item_v, self_v)
+                    if any_fields_selected:
+                        return True
+            return False
+        self_dict = self.dict()
+        relevant_fields_dict = relevant_fields.dict()
+        return any_of_fields_inner(self_dict, relevant_fields_dict)
+    
     def get_values_overselected(self, selector: Selector) -> List[List[str]]:
         # Potentially make contain depend on this method, 
         # returning True if it raises ValuesNotOverselected
@@ -251,7 +294,6 @@ class BaseSelector(Generic[Selector], BaseModel):
                     else:
                         base_model = BaseModel
 
-                    #base_model = model_field.type_.mro()[1] # TODO Find a better way to obtain - need super class
                     if model_field.required:
                         field_default = ...
                     else:

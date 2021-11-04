@@ -214,20 +214,21 @@ class PaperSearchQueryEngine(
             paper_dict = paper.dict()
 
             paper_id = {}
-            scopus_id_selected = PaperDataSelector.parse_obj({'paper_id':{'scopus_id': True}})
-            doi_selected = PaperDataSelector.parse_obj({'paper_id':{'doi':True}})
-            pmid_selected = PaperDataSelector.parse_obj({'paper_id':{'pubmed_id':True}})
-            if any([
-                scopus_id_selected in query.selector,
-                doi_selected in query.selector,
-                pmid_selected in query.selector
-            ]):
-                if scopus_id_selected in query.selector:
+            if query.selector.any_of_fields(
+                PaperDataSelector.parse_obj({
+                    'paper_id':{
+                        'scopus_id': True,
+                        'doi': True,
+                        'pubmed_id': True
+                    }
+                })
+            ):
+                if PaperDataSelector.parse_obj({'paper_id':{'scopus_id': True}}) in query.selector:
                     eid = paper_dict['eid']
                     paper_id['scopus_id'] = eid.split('-')[-1]
-                if doi_selected in query.selector:
+                if PaperDataSelector.parse_obj({'paper_id':{'doi':True}}) in query.selector:
                     paper_id['doi'] = paper_dict['doi']
-                if pmid_selected in query.selector:
+                if PaperDataSelector.parse_obj({'paper_id':{'pubmed_id':True}}) in query.selector:
                     paper_id['pubmed_id'] = paper_dict['pubmed_id']
 
                 new_paper_dict['paper_id'] = paper_id
@@ -252,39 +253,45 @@ class PaperSearchQueryEngine(
                 cover_date = paper_dict['coverDate']
                 new_paper_dict['year'] = cover_date.split('-')[0]
             
-            surname_selected = PaperDataSelector.parse_obj({
-                'authors':{
-                    'preferred_name':{
-                        'surname': True
-                    }
-                }
-            })
-            given_names_selected = PaperDataSelector.parse_obj({
-                'authors':{
-                    'preferred_name':{
+            if query.selector.any_of_fields(PaperDataSelector.parse_obj({
+                'authors': {
+                    'preferred_name': {
+                        'surname': True,
                         'given_names': True
+                    },
+                    'id': True,
+                    'other_institutions': {
+                        'id': True,
                     }
-                }
-            })
-            auth_id_selected = PaperDataSelector.parse_obj({
-                'authors':{
-                    'id': True
-                }
-            })
-            other_inst_id_selected = PaperDataSelector.parse_obj({
-                'authors':{
-                    'other_institutions':{
+                },
+            })):
+                surname_selected = PaperDataSelector.parse_obj({
+                    'authors':{
+                        'preferred_name':{
+                            'surname': True
+                        }
+                    }
+                })
+                given_names_selected = PaperDataSelector.parse_obj({
+                    'authors':{
+                        'preferred_name':{
+                            'given_names': True
+                        }
+                    }
+                })
+                auth_id_selected = PaperDataSelector.parse_obj({
+                    'authors':{
                         'id': True
                     }
-                }
-            })
+                })
+                other_inst_id_selected = PaperDataSelector.parse_obj({
+                    'authors':{
+                        'other_institutions':{
+                            'id': True
+                        }
+                    }
+                })
 
-            if any([
-                surname_selected in query.selector,
-                given_names_selected in query.selector,
-                auth_id_selected in query.selector,
-                other_inst_id_selected in query.selector
-            ]):
                 author_names = paper_dict['author_names']
 
                 if author_names is not None:
@@ -309,10 +316,14 @@ class PaperSearchQueryEngine(
                     new_authors = []
                     for j, author_name in enumerate(author_names):
                         new_author = {}
-                        if any([
-                            surname_selected in query.selector,
-                            given_names_selected in query.selector,
-                        ]):
+                        if query.selector.any_of_fields(PaperDataSelector.parse_obj({
+                            'authors':{
+                                'preferred_name':{
+                                    'given_names': True,
+                                    'surname': True
+                                }
+                            }
+                        })):
                             new_author_name = {}
                             names = author_name.split(',')
                             if surname_selected in query.selector:
@@ -339,14 +350,15 @@ class PaperSearchQueryEngine(
                     new_authors = []
                 new_paper_dict['authors'] = new_authors
 
-            inst_id_selected = PaperDataSelector.parse_obj({'institutions': {'id': True}})
-            inst_name_selected = PaperDataSelector.parse_obj({'institutions': {'name': True}})
-            inst_proc_selected = PaperDataSelector.parse_obj({'institutions': {'processed': True}})
-            if any([
-                inst_id_selected in query.selector,
-                inst_name_selected in query.selector,
-                inst_proc_selected in query.selector
-            ]):
+            if query.selector.any_of_fields(
+                PaperDataSelector.parse_obj({
+                    'institutions':{
+                        'id': True,
+                        'name': True,
+                        'processed': True
+                    }
+                })
+            ):
                 affilname = paper_dict['affilname']
                 if affilname is not None:
                     afid = paper_dict['afid']
@@ -361,12 +373,12 @@ class PaperSearchQueryEngine(
                     new_institutions = []
                     for i, affil_name in enumerate(affil_names):
                         new_institution = {}
-                        if inst_id_selected in query.selector:
+                        if PaperDataSelector.parse_obj({'institutions': {'id': True}}) in query.selector:
                             if afids is not None and len(affil_names) == len(afids):
                                 new_institution['id'] = afids[i]
                             else:
                                 new_institution['id'] = None
-                        if inst_proc_selected in query.selector:
+                        if PaperDataSelector.parse_obj({'institutions': {'processed': True}}) in query.selector:
                             affil_proc = []
                             affil_proc.append((affil_name, 'house'))
                             if len(affil_cities) == len(affil_names):
@@ -376,7 +388,7 @@ class PaperSearchQueryEngine(
                                 affil_country = affil_countries[i]
                                 affil_proc.append((affil_country, 'country'))
                             new_institution['processed'] = affil_proc
-                        if inst_name_selected in query.selector:
+                        if PaperDataSelector.parse_obj({'institutions': {'name': True}}) in query.selector:
                             new_institution['name'] = affil_name
                         new_institutions.append(new_institution)
                 else:
