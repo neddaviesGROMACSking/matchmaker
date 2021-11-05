@@ -476,7 +476,8 @@ class AuthorSearchQueryEngine(BaseAuthorSearchQueryEngine[List[BaseAuthorData]])
                                         'value': auth_id
                                     }
                                 } for auth_id in id_set]
-                            }
+                            },
+                            'selector': query.selector.dict()
                         }
                         new_results += await self.scopus_author_search(AuthorSearchQuery.parse_obj(query_dict)) # actual_request
 
