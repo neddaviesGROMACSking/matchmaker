@@ -267,6 +267,3 @@ class BaseSelector(Generic[Selector], BaseModel):
         selector_dict = self.dict()
         model = make_model(base_model.__name__, selector_dict, base_model, fields)
         return model
-
-
-

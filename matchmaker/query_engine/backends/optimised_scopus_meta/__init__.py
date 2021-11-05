@@ -263,13 +263,24 @@ class AuthorSearchQueryEngine(BaseAuthorSearchQueryEngine[List[BaseAuthorData]])
         """
         if one of the standard fields is asked for, 
         """
-        def author_query_to_paper_query(query: AuthorSearchQuery) -> PaperSearchQuery:
-            raise NotImplementedError
+        def author_query_to_paper_query(query: AuthorSearchQuery, available_fields: PaperDataSelector, required_fields: PaperDataSelector) -> PaperSearchQuery:
+            query_dict = query.query.dict()
+            selector_dict= query.selector.dict()
+            paper_selector = PaperDataSelector.parse_obj({'authors': selector_dict})
+            new_paper_selector = PaperDataSelector.generate_superset_selector(PaperDataSelector.generate_subset_selector(paper_selector, available_fields), required_fields)
+            #Since paper queries are a superset of author queries
+            return PaperSearchQuery.parse_obj({
+                'query': query_dict,
+                'selector': new_paper_selector.dict()
+            })
+
 
         if query.selector in self.scopus_author_search.available_fields:
             try:
                 native_author_query = await self.scopus_author_search.get_native_query(query) # actual_request
             except ScopusQueryError:
+                native_author_query = None
+            except TagNotFound:
                 native_author_query = None
         else:
             native_author_query = None
@@ -277,7 +288,19 @@ class AuthorSearchQueryEngine(BaseAuthorSearchQueryEngine[List[BaseAuthorData]])
         if (native_author_query is not None) and (native_author_query.metadata['author_search'] < SEARCH_MAX_ENTRIES/25):
             metadata = native_author_query.metadata
         else:
-            paper_query = author_query_to_paper_query(query)
+            required_author_fields = PaperDataSelector.parse_obj({
+                'authors': {
+                    'preferred_name': {
+                        'surname': True,
+                        'given_names': True
+                    },
+                    'id': True,
+                    'other_institutions': {
+                        'id': True,
+                    }
+                }
+            })
+            paper_query = author_query_to_paper_query(query, self.scopus_paper_search.available_fields, required_author_fields)
             native_paper_query = await self.scopus_paper_search.get_native_query(paper_query) # actual_request
             native_paper_query_request_no = native_paper_query.metadata['scopus_search']
             metadata = native_paper_query.metadata
@@ -290,35 +313,37 @@ class AuthorSearchQueryEngine(BaseAuthorSearchQueryEngine[List[BaseAuthorData]])
                     def get_all_insts_from_inst_mapper(inst_mapper: List[Tuple[Any, List[InstitutionData]]]) -> List[InstitutionData]:
                         total_inst = []
                         for _, inst_vs in inst_mapper:
-                            total_inst.append(inst_vs)
+                            total_inst += inst_vs
                         return total_inst
 
                     query_institutions = get_all_insts_from_inst_mapper(inst_mapper)
 
                     def author_in_query(author: AuthorData) -> Optional[AuthorData]:
                         def add_institutions_to_author(author: AuthorData, institutions: List[InstitutionData]) -> AuthorData:
-                            def get_more_institution_details(insitution: Optional[InstitutionData], institutions: List[InstitutionData]):
+                            def get_more_institution_details(institution: Optional[InstitutionData], institutions: List[InstitutionData]):
                                 def get_institution_from_id(id: str, institutions: List[InstitutionData]) -> Optional[InstitutionData]:
                                     for institution in institutions:
                                         if institution.id == id:
                                             return institution
                                     return None
-                                if insitution is not None:
-                                    inst_id = insitution.id
+                                if institution is not None:
+                                    inst_id = institution.id
                                     if inst_id is not None:
                                         return get_institution_from_id(inst_id, institutions)
                                 return None
+                            #print(len(institutions))
                             new_author = deepcopy(author)
-                            inst_current = author.institution_current
-                            new_inst_current = get_more_institution_details(inst_current, institutions)
-                            
-                            if new_inst_current is not None:
-                                new_author.institution_current = new_inst_current
-                            
-                            for i, other_institution in enumerate(author.other_institutions):
-                                new_other_institution = get_more_institution_details(other_institution, institutions)
-                                if new_other_institution is not None:
-                                    new_author.other_institutions[i] = new_other_institution
+                            if hasattr(author, 'institution_current'):
+                                inst_current = author.institution_current
+                                new_inst_current = get_more_institution_details(inst_current, institutions)
+                                
+                                if new_inst_current is not None:
+                                    new_author.institution_current = new_inst_current
+                            if hasattr(author, 'other_institutions'):
+                                for i, other_institution in enumerate(author.other_institutions):
+                                    new_other_institution = get_more_institution_details(other_institution, institutions)
+                                    if new_other_institution is not None:
+                                        new_author.other_institutions[i] = new_other_institution
 
                             return new_author
                         
@@ -379,8 +404,9 @@ class AuthorSearchQueryEngine(BaseAuthorSearchQueryEngine[List[BaseAuthorData]])
                                 return query_to_term
 
                             institutions = author.other_institutions
-                            if author.institution_current is not None:
-                                institutions.append(author.institution_current)
+                            if hasattr(author, 'institution_current'):
+                                if author.institution_current is not None:
+                                    institutions.append(author.institution_current)
                             institution_ids = [inst.id for inst in institutions if inst.id is not None]
 
                             return author_matches_query_inner(institution_ids,author.preferred_name.surname, author.id)(query.dict()['query'])

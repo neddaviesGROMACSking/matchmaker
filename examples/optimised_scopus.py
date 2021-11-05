@@ -67,6 +67,10 @@ author_search = AuthorSearchQuery.parse_obj({
                 }
             }
         ]
+    },
+    'selector': {
+        'id': True,
+        'preferred_name': {'given_names': True}
     }
 })
 
