@@ -35,7 +35,7 @@ from matchmaker.query_engine.backends.tools import (
     get_available_model_tags,
     check_model_tags
 )
-from matchmaker.query_engine.data_types import AuthorData, BaseAuthorData, BaseInstitutionData, InstitutionData, PaperData, BasePaperData
+from matchmaker.query_engine.data_types import AuthorData, InstitutionData, PaperData
 from matchmaker.query_engine.selector_types import AuthorDataSelector, InstitutionDataSelector, PaperDataSelector
 from matchmaker.query_engine.query_types import (
     AuthorSearchQuery,
@@ -208,7 +208,7 @@ class PaperSearchQueryEngine(
     
     async def _post_process(self, query: PaperSearchQuery, data: List[ScopusSearchResult]) -> List[PaperData]:
         new_papers = []
-        model = BasePaperData.generate_model_from_selector(query.selector)
+        model = PaperData.generate_model_from_selector(query.selector)
         for i, paper in enumerate(data):
             new_paper_dict ={}
             paper_dict = paper.dict()
@@ -450,7 +450,7 @@ class AuthorSearchQueryEngine(
     
     async def _post_process(self, query: AuthorSearchQuery, data: List[ScopusAuthorSearchResult]) -> List[AuthorData]:
         new_authors = []
-        model = BaseAuthorData.generate_model_from_selector(query.selector)
+        model = AuthorData.generate_model_from_selector(query.selector)
         for author in data:
             author_dict = author.dict()
             new_author_dict = {}
@@ -556,7 +556,7 @@ class InstitutionSearchQueryEngine(
         return make_coroutine, metadata
     
     async def _post_process(self, query: InstitutionSearchQuery, data: List[AffiliationSearchResult]) -> List[InstitutionData]:
-        model = BaseInstitutionData.generate_model_from_selector(query.selector)
+        model = InstitutionData.generate_model_from_selector(query.selector)
         new_papers = []
         for paper in data:
             paper_dict = paper.dict()

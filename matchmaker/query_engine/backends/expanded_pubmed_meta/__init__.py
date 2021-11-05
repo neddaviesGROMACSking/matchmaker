@@ -2,7 +2,7 @@ from matchmaker.query_engine.backends.pubmed import PubmedBackend, PaperSearchQu
 from matchmaker.query_engine.backends.scopus import ScopusBackend, InstitutionSearchQueryEngine
 from matchmaker.query_engine.backends.scopus.api import Auth
 
-from matchmaker.query_engine.data_types import AuthorData, BaseInstitutionData, PaperData, InstitutionData, BasePaperData, BaseAuthorData
+from matchmaker.query_engine.data_types import AuthorData, PaperData, InstitutionData
 from matchmaker.query_engine.query_types import AuthorSearchQuery, PaperSearchQuery, InstitutionSearchQuery
 from matchmaker.query_engine.selector_types import AuthorDataSelector, PaperDataSelector, PaperDataAllSelected
 from matchmaker.query_engine.slightly_less_abstract import AbstractNativeQuery
@@ -114,7 +114,7 @@ class AuthorSearchQueryEngine(
             return query_to_term
 
 
-        def authors_match(author1: BaseAuthorData, author2: BaseAuthorData):
+        def authors_match(author1: AuthorData, author2: AuthorData):
             def institution_matches(inst1: Optional[List[Tuple[str, str]]], inst2: Optional[List[Tuple[str, str]]]):
                 match_count = 0
                 if inst1 is None or inst2 is None:
@@ -157,7 +157,7 @@ class AuthorSearchQueryEngine(
                 return True
             else:
                 return False
-        def group_by_location(filtered_authors: List[BaseAuthorData]):
+        def group_by_location(filtered_authors: List[AuthorData]):
             final_list = []
             for i in filtered_authors:
                 match_authors = []
@@ -168,7 +168,7 @@ class AuthorSearchQueryEngine(
                     final_list.append(match_authors)
             return final_list
         
-        def pick_largest_from_group(location_groups: List[List[BaseAuthorData]]):
+        def pick_largest_from_group(location_groups: List[List[AuthorData]]):
             finals = []
             for location_group in location_groups:
                 lens = [len(str(i)) for i in location_group]
@@ -178,7 +178,7 @@ class AuthorSearchQueryEngine(
                     finals.append(location)
             return finals
 
-        model = BaseAuthorData.generate_model_from_selector(query.selector)
+        model = AuthorData.generate_model_from_selector(query.selector)
 
 
         combined_authors = []

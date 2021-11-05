@@ -4,7 +4,7 @@ from matchmaker.query_engine.backends.scopus import PaperSearchQueryEngine as Sc
 from matchmaker.query_engine.backends.scopus import AuthorSearchQueryEngine as ScopusAuthorSearchQueryEngine
 from matchmaker.query_engine.backends.scopus import InstitutionSearchQueryEngine as ScopusInstitutionSearchQueryEngine
 
-from matchmaker.query_engine.data_types import AuthorData, PaperData, InstitutionData, BasePaperData, BaseAuthorData
+from matchmaker.query_engine.data_types import AuthorData, PaperData, InstitutionData
 from matchmaker.query_engine.query_types import AuthorSearchQuery, PaperSearchQuery, InstitutionSearchQuery
 from matchmaker.query_engine.selector_types import AuthorDataAllSelected, PaperDataSelector, PaperDataAllSelected, AuthorDataSelector
 from matchmaker.query_engine.slightly_less_abstract import AbstractNativeQuery
@@ -40,7 +40,7 @@ def bin_items(items: List[str], bin_limit: int) -> List[List[str]]:
 
 
 
-async def get_doi_list_from_data(papers: List[BasePaperData]) -> List[str]:
+async def get_doi_list_from_data(papers: List[PaperData]) -> List[str]:
     return [paper.paper_id.doi for paper in papers if paper.paper_id.doi is not None]
 
 async def get_doi_query_from_list(dois: List[str], selector) -> PaperSearchQuery:
@@ -64,7 +64,7 @@ async def get_doi_query_from_list(dois: List[str], selector) -> PaperSearchQuery
 async def get_dois_remaining(scopus_dois: List[str], pubmed_dois: List[str]) -> List[str]:
     return [doi for doi in scopus_dois if doi not in pubmed_dois]
 
-class PaperSearchQueryEngine(BasePaperSearchQueryEngine[List[BasePaperData]]):
+class PaperSearchQueryEngine(BasePaperSearchQueryEngine[List[PaperData]]):
     def __init__(
         self, 
         scopus_paper_search,
@@ -84,7 +84,7 @@ class PaperSearchQueryEngine(BasePaperSearchQueryEngine[List[BasePaperData]]):
             self.pubmed_paper_search.available_fields
         ]
     
-    async def _query_to_awaitable(self, query: PaperSearchQuery) -> Tuple[Callable[[], Awaitable[List[BasePaperData]]], Dict[str, int]]:
+    async def _query_to_awaitable(self, query: PaperSearchQuery) -> Tuple[Callable[[], Awaitable[List[PaperData]]], Dict[str, int]]:
         if query.selector not in self.available_fields:
             overselected_fields = self.available_fields.get_values_overselected(query.selector)
             raise QueryNotSupportedError(overselected_fields)
@@ -108,7 +108,7 @@ class PaperSearchQueryEngine(BasePaperSearchQueryEngine[List[BasePaperData]]):
         }
         pubmed_selector = PaperDataSelector.generate_subset_selector(query.selector, self.pubmed_paper_search.available_fields)
         
-        async def make_coroutine() -> List[BasePaperData]:
+        async def make_coroutine() -> List[PaperData]:
             """
             If you select just dois, standard query is all you get
             If you select fields from pubmed intercept scopus, you get pubmed results and maybe go back to scopus for more data
@@ -168,11 +168,11 @@ class PaperSearchQueryEngine(BasePaperSearchQueryEngine[List[BasePaperData]]):
         
         return make_coroutine, metadata
 
-    async def _post_process(self, query: PaperSearchQuery, data: List[BasePaperData]) -> List[BasePaperData]:
-        def merge_papers(paper: List[BasePaperData]) -> BasePaperData:
+    async def _post_process(self, query: PaperSearchQuery, data: List[PaperData]) -> List[PaperData]:
+        def merge_papers(paper: List[PaperData]) -> PaperData:
             # Not necessary yet as union search currently not possible
             raise NotImplementedError
-        model = BasePaperData.generate_model_from_selector(query.selector)
+        model = PaperData.generate_model_from_selector(query.selector)
         new_data = []
         id_log = []
         for i in data:
@@ -187,7 +187,7 @@ class PaperSearchQueryEngine(BasePaperSearchQueryEngine[List[BasePaperData]]):
         return new_data
 
 
-class AuthorSearchQueryEngine(BaseAuthorSearchQueryEngine[List[BaseAuthorData]]):
+class AuthorSearchQueryEngine(BaseAuthorSearchQueryEngine[List[AuthorData]]):
     scopus_paper_search: ScopusPaperSearchQueryEngine
     scopus_author_search: ScopusAuthorSearchQueryEngine
     scopus_institution_search: ScopusInstitutionSearchQueryEngine
@@ -259,7 +259,7 @@ class AuthorSearchQueryEngine(BaseAuthorSearchQueryEngine[List[BaseAuthorData]])
         ]
 
 
-    async def _query_to_awaitable(self, query: AuthorSearchQuery) -> Tuple[Callable[[], Awaitable[List[BaseAuthorData]]], Dict[str, int]]:
+    async def _query_to_awaitable(self, query: AuthorSearchQuery) -> Tuple[Callable[[], Awaitable[List[AuthorData]]], Dict[str, int]]:
         """
         if one of the standard fields is asked for, 
         """
@@ -308,7 +308,7 @@ class AuthorSearchQueryEngine(BaseAuthorSearchQueryEngine[List[BaseAuthorData]])
 
 
         async def make_coroutine() -> List[AuthorData]:
-            def get_unique_authors(query: AuthorSearchQuery, papers: List[BasePaperData], inst_mapper: List[Tuple[Any, List[InstitutionData]]]) -> List[AuthorData]:
+            def get_unique_authors(query: AuthorSearchQuery, papers: List[PaperData], inst_mapper: List[Tuple[Any, List[InstitutionData]]]) -> List[AuthorData]:
                 def construct_author_in_query(query: AuthorSearchQuery, inst_mapper: List[Tuple[Any, List[InstitutionData]]]) -> Callable[[AuthorData], Optional[AuthorData]]:
                     def get_all_insts_from_inst_mapper(inst_mapper: List[Tuple[Any, List[InstitutionData]]]) -> List[InstitutionData]:
                         total_inst = []
@@ -484,8 +484,8 @@ class AuthorSearchQueryEngine(BaseAuthorSearchQueryEngine[List[BaseAuthorData]])
             return new_results
         return make_coroutine, metadata
 
-    async def _post_process(self, query: AuthorSearchQuery, data: List[BaseAuthorData]) -> List[BaseAuthorData]:
-        model = BaseAuthorData.generate_model_from_selector(query.selector)
+    async def _post_process(self, query: AuthorSearchQuery, data: List[AuthorData]) -> List[AuthorData]:
+        model = AuthorData.generate_model_from_selector(query.selector)
         output = [model.parse_obj(i.dict()) for i in data]
         return output
 

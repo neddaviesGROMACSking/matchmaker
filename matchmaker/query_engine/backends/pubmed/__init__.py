@@ -34,7 +34,7 @@ from matchmaker.query_engine.backends.pubmed.processors import (
     process_institution,
 )
 from matchmaker.query_engine.backends.tools import replace_dict_tags, replace_ids
-from matchmaker.query_engine.data_types import AuthorData, BasePaperData, PaperData
+from matchmaker.query_engine.data_types import AuthorData, PaperData
 from matchmaker.query_engine.query_types import AuthorSearchQuery, PaperSearchQuery
 from matchmaker.query_engine.query_types import (
     Abstract,
@@ -563,7 +563,7 @@ class PaperSearchQueryEngine(
             return new_data_dict
         
         selector = query.selector
-        model = BasePaperData.generate_model_from_selector(selector)
+        model = PaperData.generate_model_from_selector(selector)
         sub_paper_selector = SubPaperDataSelector.parse_obj(selector.dict())
         if isinstance(selector.references, bool):
             if selector.references:

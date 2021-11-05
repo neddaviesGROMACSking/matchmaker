@@ -1,4 +1,3 @@
-from matchmaker.query_engine.data_types import BasePaperData
 from matchmaker.query_engine.query_types import PaperSearchQuery, AuthorSearchQuery, InstitutionSearchQuery
 from matchmaker.query_engine.backends.scopus import ScopusBackend
 from matchmaker.query_engine.selector_types import PaperDataSelector

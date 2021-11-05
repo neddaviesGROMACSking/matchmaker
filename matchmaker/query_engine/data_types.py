@@ -14,12 +14,12 @@ class InstitutionDataDef(BaseModel):
     paper_count: Optional[int] = None
     name_variants: Optional[List[str]] = None
 
-class BaseInstitutionData(BaseData[InstitutionDataSelector]):
+InstitutionDataDef.__name__ = 'InstitutionData'
+
+class InstitutionData(BaseData[InstitutionDataSelector]):
     @classmethod
     def generate_model_from_selector(cls, selector: Union[bool, InstitutionDataSelector] = True):
         return super().generate_model_from_selector(InstitutionDataDef, selector)
-                
-InstitutionData = BaseInstitutionData.generate_model_from_selector()
 
 class AuthorDataDef(BaseModel):
     class Name(BaseModel):
@@ -38,20 +38,20 @@ class AuthorDataDef(BaseModel):
     paper_count: Optional[int] = None
     paper_ids: Optional[List[PaperIDDef]] = []
 
-class BaseAuthorData(BaseData[AuthorDataSelector]):
+AuthorDataDef.__name__ = 'AuthorData'
+
+class AuthorData(BaseData[AuthorDataSelector]):
     @classmethod
     def generate_model_from_selector(cls, selector: Union[bool, SelectorType] = True):
         return super().generate_model_from_selector(
             AuthorDataDef, 
             selector,
             {
-                'institution_current': BaseInstitutionData,
-                'other_institutions': BaseInstitutionData,
+                'institution_current': InstitutionData,
+                'other_institutions': InstitutionData,
                 'paper_ids': BasePaperID
             }
         )
-
-AuthorData = BaseAuthorData.generate_model_from_selector()
 
 class Topic(BaseModel):
     descriptor: Optional[str]
@@ -74,19 +74,19 @@ class PaperDataDef(SubPaperData):
     references: Optional[Union[int, List[SubPaperData]]] = None
     cited_by: Optional[Union[int, List[SubPaperData]]] = None
 
-class BasePaperData(BaseData[PaperDataSelector]):
+PaperDataDef.__name__ = 'PaperData'
+
+class PaperData(BaseData[PaperDataSelector]):
     @classmethod
     def generate_model_from_selector(cls, selector: Union[bool, SelectorType] = True):
         return super().generate_model_from_selector(
             PaperDataDef, 
             selector,
             {
-                'institutions': BaseInstitutionData,
-                'authors': BaseAuthorData,
-                'institution_current': BaseInstitutionData,
-                'other_institutions': BaseInstitutionData,
+                'institutions': InstitutionData,
+                'authors': AuthorData,
+                'institution_current': InstitutionData,
+                'other_institutions': InstitutionData,
                 'paper_id': BasePaperID
             }
         )
-
-PaperData = BasePaperData.generate_model_from_selector()
