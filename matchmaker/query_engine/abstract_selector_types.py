@@ -6,6 +6,8 @@ from pydantic import BaseModel, create_model
 from pydantic.fields import ModelField
 from copy import copy
 import pdb
+from type_reconstructor import extract_element
+
 
 def extract_sub_model(model_field: ModelField) -> Tuple[BaseModel, str, Callable[[BaseModel], type]]:
     """
@@ -14,53 +16,11 @@ def extract_sub_model(model_field: ModelField) -> Tuple[BaseModel, str, Callable
     Submodel name
     Function that takes submodel type and wraps in outer types
     """
-    EllipsisType = type(...)
-    SomethingType = Union[EllipsisType, type, Tuple[type, List['SomethingType']]]
-    def get_something_type(tp: type) -> Tuple[SomethingType, BaseModel]:
-        args = list(get_args(tp))
-        origin = get_origin(tp)
-        if args == [] or origin is None:
-            if hasattr(tp, '__fields__'):
-                return ..., tp
-            else:
-                return tp, None
-        else:
-            possible_models = []
-            new_args = []
-            for arg in args:
-                smtp, model = get_something_type(arg)
-                if model is not None:
-                    possible_models += [model]
-                new_args += [smtp]
-            if len(possible_models)>1:
-                raise ValueError('More than one base model found')
-            elif len(possible_models) == 1:
-                relevant_model = possible_models[0]
-            else:
-                relevant_model = None
-            return (origin, new_args), relevant_model
     
-    def construct_func_type_wrapper_from_smtp(smtp: SomethingType):
-        def func_type_wrapper(submodel: BaseModel):                
-            def func_type_inner(current_smtp: SomethingType) -> type:
-                if isinstance(current_smtp, EllipsisType):
-                    return submodel
-                elif isinstance(current_smtp, tuple):
-                    origin = current_smtp[0]
-                    args = current_smtp[1]
-                    new_args = []
-                    for arg in args:
-                        new_arg = func_type_inner(arg)
-                        new_args += [new_arg]
-                    return origin[tuple(new_args)] #type: ignore - No way to verify origin has this method
-                else:
-                    return current_smtp
-            return func_type_inner(smtp)
-        return func_type_wrapper
-
-    smth_type, submodel_type = get_something_type(model_field.outer_type_)
+    def condition(tp: type) -> bool:
+        return hasattr(tp, '__fields__')
+    submodel_type, func_type_wrapper = extract_element(model_field.outer_type_, condition)
     submodel_name = submodel_type.__name__
-    func_type_wrapper = construct_func_type_wrapper_from_smtp(smth_type)
 
     return submodel_type, submodel_name, func_type_wrapper
 
