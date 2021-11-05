@@ -1,6 +1,6 @@
 from pydantic import BaseModel
 from typing import Generic, Union, List, Optional, Tuple, Dict, TypeVar
-from matchmaker.query_engine.id_types import PaperIDDef, BasePaperID
+from matchmaker.query_engine.id_types import PaperIDDef, PaperID
 from matchmaker.query_engine.selector_types import InstitutionDataSelector, AuthorDataSelector, PaperDataSelector
 from matchmaker.query_engine.abstract_selector_types import BaseSelector
 from matchmaker.query_engine.abstract_data_types import BaseData
@@ -49,7 +49,7 @@ class AuthorData(BaseData[AuthorDataSelector]):
             {
                 'institution_current': InstitutionData,
                 'other_institutions': InstitutionData,
-                'paper_ids': BasePaperID
+                'paper_ids': PaperID
             }
         )
 
@@ -87,6 +87,6 @@ class PaperData(BaseData[PaperDataSelector]):
                 'authors': AuthorData,
                 'institution_current': InstitutionData,
                 'other_institutions': InstitutionData,
-                'paper_id': BasePaperID
+                'paper_id': PaperID
             }
         )

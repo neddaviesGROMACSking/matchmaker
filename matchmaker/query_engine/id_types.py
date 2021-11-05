@@ -16,18 +16,9 @@ class PaperIDDef(BaseModel):
     pubmed_id: Optional[str] = None
     scopus_id: Optional[str] = None
 
-class BasePaperID(BaseData[PaperIDSelector]):
-    """
-    @root_validator(allow_reuse=True)
-    def one_or_more_selected(cls, values):
-        selected_ids = []
-        for id_name, id_value in values.items():
-            if id_value is not None:
-                selected_ids.append(id_value)
-        if len(selected_ids)==0:
-            raise ValueError('No ids selected')
-        return values
-    """
+PaperIDDef.__name__ = 'PaperID'
+
+class PaperID(BaseData[PaperIDSelector]):
     def __eq__(self, other) -> bool:
         common_fields = [i for i in self.__fields__.keys() if i in other.__fields__]
         for id_type in common_fields:
@@ -43,8 +34,6 @@ class BasePaperID(BaseData[PaperIDSelector]):
             PaperIDDef, 
             selector
         )
-
-PaperID = BasePaperID.generate_model_from_selector()
 
 class PubmedId(BaseModel):
     author_name: str
