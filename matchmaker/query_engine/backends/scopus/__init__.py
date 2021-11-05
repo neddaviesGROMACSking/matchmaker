@@ -456,17 +456,19 @@ class AuthorSearchQueryEngine(
             new_author_dict = {}
             if AuthorDataSelector(id = True) in query.selector:
                 new_author_dict['id'] = author_dict['eid'].split('-')[-1]
-            if query.selector.any_of_fields(AuthorDataSelector(
-                surname = True,
-                initials = True,
-                given_names = True
-            )):
+            if query.selector.any_of_fields(AuthorDataSelector.parse_obj({
+                'preferred_name':{
+                    'given_names': True,
+                    'surname': True,
+                    'initials': True
+                }
+            })):
                 preferred_name = {}
-                if AuthorDataSelector(surname = True) in query.selector:
+                if AuthorDataSelector.parse_obj({'preferred_name':{'surname': True}}) in query.selector:
                     preferred_name['surname'] = author_dict['surname']
-                if AuthorDataSelector(initials = True) in query.selector:
+                if AuthorDataSelector.parse_obj({'preferred_name':{'initials': True}}) in query.selector:
                     preferred_name['initials'] = author_dict['initials']
-                if AuthorDataSelector(given_names = True) in query.selector:
+                if AuthorDataSelector.parse_obj({'preferred_name':{'given_names': True}}) in query.selector:
                     preferred_name['given_names'] = author_dict['givenname']
                 new_author_dict['preferred_name'] = preferred_name
             
