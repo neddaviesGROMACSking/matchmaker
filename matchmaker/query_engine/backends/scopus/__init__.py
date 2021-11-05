@@ -1,5 +1,6 @@
 from html import unescape
 from typing import Awaitable, Callable, Dict, List, Tuple
+from matchmaker import query_engine
 from matchmaker.query_engine.backend import Backend
 from matchmaker.query_engine.backends import (
     BaseAuthorSearchQueryEngine,
@@ -35,12 +36,14 @@ from matchmaker.query_engine.backends.tools import (
     check_model_tags
 )
 from matchmaker.query_engine.data_types import AuthorData, InstitutionData, PaperData
+from matchmaker.query_engine.selector_types import AuthorDataSelector, InstitutionDataSelector, PaperDataSelector
 from matchmaker.query_engine.query_types import (
     AuthorSearchQuery,
     InstitutionSearchQuery,
     PaperSearchQuery,
 )
 import pdb
+from matchmaker.query_engine.backends.exceptions import QueryNotSupportedError
 class NotEnoughRequests(Exception):
     pass
 
@@ -122,13 +125,54 @@ def institution_query_to_affiliation(query: InstitutionSearchQuery) -> Affiliati
 
 class PaperSearchQueryEngine(
         BasePaperSearchQueryEngine[List[ScopusSearchResult]]):
-    def __init__(self, api_key:str , institution_token: str, rate_limiter: RateLimiter = RateLimiter(max_requests_per_second = 9), full_view: bool = True, *args, **kwargs):
+    def __init__(self, api_key:str , institution_token: str, rate_limiter: RateLimiter = RateLimiter(max_requests_per_second = 9), *args, **kwargs):
         self.api_key = api_key
         self.institution_token = institution_token
-        if full_view:
-            self.view = 'COMPLETE'
-        else:
-            self.view = 'STANDARD'
+        self.available_fields = PaperDataSelector.parse_obj({
+            'paper_id': {
+                'doi': True,
+                'pubmed_id': True,
+                'scopus_id': True
+            },
+            'title': True,
+            'authors': {
+                'preferred_name': {
+                    'surname': True,
+                    'given_names': True
+                },
+                'id': True,
+                'other_institutions': {
+                    'id': True,
+                }
+            },
+            'year': True,
+            'source_title': True,
+            'source_title_id': True,
+            'abstract': True,
+            'keywords': True,
+            'institutions': {
+                'name': True,
+                'id': True,
+                'processed': True
+            }
+        })
+        self.complete_fields = self.available_fields
+        self.standard_fields = PaperDataSelector.parse_obj({
+            'paper_id': {
+                'doi': True,
+                'pubmed_id': True,
+                'scopus_id': True
+            },
+            'title': True,
+            'year': True,
+            'source_title': True,
+            'source_title_id': True,
+            'institutions': {
+                'name': True,
+                'processed': True
+            }
+        })
+        self.possible_searches = [self.complete_fields, self.standard_fields]
         super().__init__(rate_limiter, *args, **kwargs)
     
     async def _query_to_awaitable(
@@ -138,7 +182,16 @@ class PaperSearchQueryEngine(
     ) -> Tuple[Callable[[NewAsyncClient], Awaitable[List[ScopusSearchResult]]], Dict[str, int]]:
         scopus_search_query = paper_query_to_scopus(query)
         cache_remaining = await get_scopus_query_remaining_in_cache()
-        view = self.view
+
+        if query.selector in self.available_fields:
+            if query.selector in self.standard_fields:
+                view = 'STANDARD'
+            else:
+                view = 'COMPLETE'
+        else:
+            overselected_fields = self.available_fields.get_values_overselected(query.selector)
+            raise QueryNotSupportedError(overselected_fields)
+
         if cache_remaining > 1:
             no_requests = await get_scopus_query_no_requests(scopus_search_query, client, view, self.api_key, self.institution_token)
         else:
@@ -155,121 +208,194 @@ class PaperSearchQueryEngine(
     
     async def _post_process(self, query: PaperSearchQuery, data: List[ScopusSearchResult]) -> List[PaperData]:
         new_papers = []
+        model = PaperData.generate_model_from_selector(query.selector)
         for i, paper in enumerate(data):
             new_paper_dict ={}
             paper_dict = paper.dict()
-            eid = paper_dict.pop('eid')
 
             paper_id = {}
-            paper_id['scopus_id'] = eid.split('-')[-1]
-            paper_id['doi'] = paper_dict['doi']
-            paper_id['pubmed_id'] = paper_dict['pubmed_id']
-            new_paper_dict['paper_id'] = paper_id
-
-            new_paper_dict['title'] = paper_dict['title']
-            new_paper_dict['abstract'] = paper_dict['description']
-            new_paper_dict['source_title'] = paper_dict['publicationName']
-            new_paper_dict['source_title_id'] = paper_dict['source_id']
-            new_paper_dict['cited_by'] = paper_dict['citedby_count']
-
-            keywords = paper_dict['authkeywords']
-            if keywords is not None:
-                new_paper_dict['keywords'] = keywords.split(' | ')
-            else:
-                new_paper_dict['keywords'] = keywords
-            
-            cover_date = paper_dict['coverDate']
-            new_paper_dict['year'] = cover_date.split('-')[0]
-            
-            affilname = paper_dict['affilname']
-
-            if affilname is not None:
-                afid = paper_dict['afid']
-                if afid is not None:
-                    afids = afid.split(';')
-                else:
-                    afids = afid
-                affil_names = unescape(affilname).split(';')
-                affil_cities = unescape(paper_dict['affiliation_city']).split(';')
-                affil_countries = unescape(paper_dict['affiliation_country']).split(';')
-                affil_procs = []
-
-                for i, a_name in enumerate(affil_names):
-                    affil_proc = []
-                    affil_proc.append((a_name, 'house'))
-                    if len(affil_cities) == len(affil_names):
-                        affil_city = affil_cities[i]
-                        affil_proc.append((affil_city, 'city'))
-                    if len(affil_countries) == len(affil_names):
-                        affil_country = affil_countries[i]
-                        affil_proc.append((affil_country, 'country'))
-                    affil_procs.append(affil_proc)
-
-                new_institutions = []
-                for m, affil_name in enumerate(affil_names):
-                    new_institution = {}
-                    if len(affil_names) == len(afids):
-                        new_institution['id'] = afids[m]
-                    if len(affil_names) == len(affil_procs):
-                        new_institution['processed'] = affil_procs[m]
-                    new_institution['name'] = affil_name
-                    new_institutions.append(new_institution)
-            else:
-                new_institutions = None
-            new_paper_dict['institutions'] = new_institutions
-
-
-            author_names = paper_dict['author_names']
-            if author_names is not None:
-                if author_names[0] == '(':
-                    author_names = author_names[1:-1].split(';')
-                else:
-                    author_names = author_names.split(';')
-                
-                new_author_names = []
-                for author_name in author_names:
-                    names = author_name.split(',')
-                    surname = names[0]
-                    if len(names) > 1:
-                        given_names = names[1]
-                    else:
-                        given_names = None
-                    new_author_name = {
-                        'surname': surname,
-                        'given_names': given_names
+            if query.selector.any_of_fields(
+                PaperDataSelector.parse_obj({
+                    'paper_id':{
+                        'scopus_id': True,
+                        'doi': True,
+                        'pubmed_id': True
                     }
-                    new_author_names.append(new_author_name)
+                })
+            ):
+                if PaperDataSelector.parse_obj({'paper_id':{'scopus_id': True}}) in query.selector:
+                    eid = paper_dict['eid']
+                    paper_id['scopus_id'] = eid.split('-')[-1]
+                if PaperDataSelector.parse_obj({'paper_id':{'doi':True}}) in query.selector:
+                    paper_id['doi'] = paper_dict['doi']
+                if PaperDataSelector.parse_obj({'paper_id':{'pubmed_id':True}}) in query.selector:
+                    paper_id['pubmed_id'] = paper_dict['pubmed_id']
 
-                author_afids = paper_dict['author_afids']
-                if author_afids is not None:
-                    author_afids = [i.split('-') for i in author_afids.split(';')]
+                new_paper_dict['paper_id'] = paper_id
 
-                author_ids = paper_dict['author_ids']
-                if author_ids is not None:
-                    author_ids = author_ids.split(';')
-                
-
-                new_authors = []
-                for j, author_name in enumerate(new_author_names):
-                    if author_ids is not None and (len(new_author_names) == len(author_ids)):
-                        author_id = author_ids[j]
-                    else:
-                        author_id = None
-                    if author_afids is not None and len(new_author_names) == len(author_afids):
-                        other_institutions = [{'id': k} for k in author_afids[j]]
-                    else:
-                        other_institutions = []
-                    new_author = {
-                        'preferred_name': author_name,
-                        'other_institutions': other_institutions,
-                        'id': author_id
-                    }
-                    new_authors.append(new_author)
-            else:
-                new_authors = []
-            new_paper_dict['authors'] = new_authors
+            if PaperDataSelector(title = True) in query.selector:
+                new_paper_dict['title'] = paper_dict['title']
+            if PaperDataSelector(abstract = True) in query.selector:
+                new_paper_dict['abstract'] = paper_dict['description']
+            if PaperDataSelector(source_title = True) in query.selector:
+                new_paper_dict['source_title'] = paper_dict['publicationName']
+            if PaperDataSelector(source_title_id = True) in query.selector:
+                new_paper_dict['source_title_id'] = paper_dict['source_id']
+            if PaperDataSelector(cited_by = True) in query.selector:
+                new_paper_dict['cited_by'] = paper_dict['citedby_count']
+            if PaperDataSelector(keywords = True) in query.selector:
+                keywords = paper_dict['authkeywords']
+                if keywords is not None:
+                    new_paper_dict['keywords'] = keywords.split(' | ')
+                else:
+                    new_paper_dict['keywords'] = keywords
+            if PaperDataSelector(year = True) in query.selector:
+                cover_date = paper_dict['coverDate']
+                new_paper_dict['year'] = cover_date.split('-')[0]
             
-            new_papers.append(PaperData.parse_obj(new_paper_dict))
+            if query.selector.any_of_fields(PaperDataSelector.parse_obj({
+                'authors': {
+                    'preferred_name': {
+                        'surname': True,
+                        'given_names': True
+                    },
+                    'id': True,
+                    'other_institutions': {
+                        'id': True,
+                    }
+                },
+            })):
+                surname_selected = PaperDataSelector.parse_obj({
+                    'authors':{
+                        'preferred_name':{
+                            'surname': True
+                        }
+                    }
+                })
+                given_names_selected = PaperDataSelector.parse_obj({
+                    'authors':{
+                        'preferred_name':{
+                            'given_names': True
+                        }
+                    }
+                })
+                auth_id_selected = PaperDataSelector.parse_obj({
+                    'authors':{
+                        'id': True
+                    }
+                })
+                other_inst_id_selected = PaperDataSelector.parse_obj({
+                    'authors':{
+                        'other_institutions':{
+                            'id': True
+                        }
+                    }
+                })
+
+                author_names = paper_dict['author_names']
+
+                if author_names is not None:
+                    if author_names[0] == '(':
+                        author_names = author_names[1:-1].split(';')
+                    else:
+                        author_names = author_names.split(';')
+
+                    if other_inst_id_selected in query.selector:
+                        author_afids = paper_dict['author_afids']
+                        if author_afids is not None:
+                            author_afids = [i.split('-') for i in author_afids.split(';')]
+                    else:
+                        author_afids = None
+                    if auth_id_selected in query.selector:
+                        author_ids = paper_dict['author_ids']
+                        if author_ids is not None:
+                            author_ids = author_ids.split(';')
+                    else:
+                        author_ids = None
+            
+                    new_authors = []
+                    for j, author_name in enumerate(author_names):
+                        new_author = {}
+                        if query.selector.any_of_fields(PaperDataSelector.parse_obj({
+                            'authors':{
+                                'preferred_name':{
+                                    'given_names': True,
+                                    'surname': True
+                                }
+                            }
+                        })):
+                            new_author_name = {}
+                            names = author_name.split(',')
+                            if surname_selected in query.selector:
+                                new_author_name['surname'] = names[0]
+                            if given_names_selected in query.selector:
+                                if len(names) > 1:
+                                    given_names = names[1]
+                                else:
+                                    given_names = None
+                                new_author_name['given_names'] = given_names
+                            new_author['preferred_name'] = new_author_name
+                        if auth_id_selected in query.selector:
+                            if author_ids is not None and (len(author_names) == len(author_ids)):
+                                new_author['id'] = author_ids[j]
+                            else:
+                                new_author['id'] = None
+                        if other_inst_id_selected in query.selector:
+                            if author_afids is not None and len(author_names) == len(author_afids):
+                                new_author['other_institutions'] = [{'id': k} for k in author_afids[j]]
+                            else:
+                                new_author['other_institutions'] = []
+                        new_authors.append(new_author)
+                else:
+                    new_authors = []
+                new_paper_dict['authors'] = new_authors
+
+            if query.selector.any_of_fields(
+                PaperDataSelector.parse_obj({
+                    'institutions':{
+                        'id': True,
+                        'name': True,
+                        'processed': True
+                    }
+                })
+            ):
+                affilname = paper_dict['affilname']
+                if affilname is not None:
+                    afid = paper_dict['afid']
+                    if afid is not None:
+                        afids = afid.split(';')
+                    else:
+                        afids = afid
+                    affil_names = unescape(affilname).split(';')
+                    affil_cities = unescape(paper_dict['affiliation_city']).split(';')
+                    affil_countries = unescape(paper_dict['affiliation_country']).split(';')
+
+                    new_institutions = []
+                    for i, affil_name in enumerate(affil_names):
+                        new_institution = {}
+                        if PaperDataSelector.parse_obj({'institutions': {'id': True}}) in query.selector:
+                            if afids is not None and len(affil_names) == len(afids):
+                                new_institution['id'] = afids[i]
+                            else:
+                                new_institution['id'] = None
+                        if PaperDataSelector.parse_obj({'institutions': {'processed': True}}) in query.selector:
+                            affil_proc = []
+                            affil_proc.append((affil_name, 'house'))
+                            if len(affil_cities) == len(affil_names):
+                                affil_city = affil_cities[i]
+                                affil_proc.append((affil_city, 'city'))
+                            if len(affil_countries) == len(affil_names):
+                                affil_country = affil_countries[i]
+                                affil_proc.append((affil_country, 'country'))
+                            new_institution['processed'] = affil_proc
+                        if PaperDataSelector.parse_obj({'institutions': {'name': True}}) in query.selector:
+                            new_institution['name'] = affil_name
+                        new_institutions.append(new_institution)
+                else:
+                    new_institutions = None
+                new_paper_dict['institutions'] = new_institutions
+
+            new_papers.append(model.parse_obj(new_paper_dict))
         return new_papers
 
 
@@ -279,6 +405,23 @@ class AuthorSearchQueryEngine(
     def __init__(self, api_key:str , institution_token: str, rate_limiter: RateLimiter = RateLimiter(max_requests_per_second = 2), *args, **kwargs):
         self.api_key = api_key
         self.institution_token = institution_token
+        self.available_fields = AuthorDataSelector.parse_obj({
+            'id':True,
+            'preferred_name':{
+                'surname': True,
+                'initials': True,
+                'given_names': True,
+            },
+            'subjects': True,
+            'institution_current': {
+                'name': True,
+                'id': True,
+                'processed': True
+            },
+            'paper_count': True
+        })
+        self.possible_searches = [self.available_fields]
+           
         super().__init__(rate_limiter, *args, **kwargs)
     
     async def _query_to_awaitable(
@@ -286,6 +429,9 @@ class AuthorSearchQueryEngine(
         query: AuthorSearchQuery, 
         client: NewAsyncClient
     ) -> Tuple[Callable[[NewAsyncClient], Awaitable[List[ScopusAuthorSearchResult]]], Dict[str, int]]:
+        if query.selector not in self.available_fields:
+            overselected_fields = self.available_fields.get_values_overselected(query.selector)
+            raise QueryNotSupportedError(overselected_fields)
         author_search_query = author_query_to_scopus_author(query)
         cache_remaining = await get_author_query_remaining_in_cache()
         if cache_remaining > 1:
@@ -302,48 +448,69 @@ class AuthorSearchQueryEngine(
             return await author_search_on_query(author_search_query, client, self.api_key, self.institution_token)
         return make_coroutine, metadata
     
-    async def _post_process(self, query: PaperSearchQuery, data: List[ScopusAuthorSearchResult]) -> List[AuthorData]:
-        new_papers = []
-        for paper in data:
-            paper_dict = paper.dict()
-            new_paper_dict = {}
-            new_paper_dict['id'] = paper_dict['eid'].split('-')[-1]
-            preferred_name = {
-                'surname': paper_dict['surname'],
-                'initials': paper_dict['initials'],
-                'givennames': paper_dict['givenname'],
-            }
-            new_paper_dict['preferred_name'] = preferred_name
-            paper_count = paper_dict['documents']
-            new_paper_dict['paper_count'] = int(paper_count)
-
-            if paper_dict['areas'] != ' ()':
-                subject_list = paper_dict['areas'].split('; ')
-                subjects = []
-                for i in subject_list:
-                    subject = i[0:4]
-                    doc_count = i[6:-1]
-                    subjects.append({
-                        'name': subject,
-                        'paper_count': doc_count
-                    })
-            else:
-                subjects = []
-            new_paper_dict['subjects'] = subjects
+    async def _post_process(self, query: AuthorSearchQuery, data: List[ScopusAuthorSearchResult]) -> List[AuthorData]:
+        new_authors = []
+        model = AuthorData.generate_model_from_selector(query.selector)
+        for author in data:
+            author_dict = author.dict()
+            new_author_dict = {}
+            if AuthorDataSelector(id = True) in query.selector:
+                new_author_dict['id'] = author_dict['eid'].split('-')[-1]
+            if query.selector.any_of_fields(AuthorDataSelector.parse_obj({
+                'preferred_name':{
+                    'given_names': True,
+                    'surname': True,
+                    'initials': True
+                }
+            })):
+                preferred_name = {}
+                if AuthorDataSelector.parse_obj({'preferred_name':{'surname': True}}) in query.selector:
+                    preferred_name['surname'] = author_dict['surname']
+                if AuthorDataSelector.parse_obj({'preferred_name':{'initials': True}}) in query.selector:
+                    preferred_name['initials'] = author_dict['initials']
+                if AuthorDataSelector.parse_obj({'preferred_name':{'given_names': True}}) in query.selector:
+                    preferred_name['given_names'] = author_dict['givenname']
+                new_author_dict['preferred_name'] = preferred_name
             
-            processed = []
-            if paper_dict['city'] is not None:
-                processed.append((paper_dict['city'], 'city'))
-            if paper_dict['country'] is not None:
-                processed.append((paper_dict['country'], 'country'))
-            new_institution = {
-                'name': paper_dict['affiliation'],
-                'id': paper_dict['affiliation_id'],
-                'processed': processed
-            }
-            new_paper_dict['institution_current'] = new_institution
-            new_papers.append(AuthorData.parse_obj(new_paper_dict))
-        return new_papers
+            if AuthorDataSelector(paper_count = True) in query.selector:
+                new_author_dict['paper_count'] = int(author_dict['documents'])
+            if AuthorDataSelector(subjects = True) in query.selector:
+                if author_dict['areas'] != ' ()':
+                    subject_list = author_dict['areas'].split('; ')
+                    subjects = []
+                    for i in subject_list:
+                        subject = i[0:4]
+                        doc_count = i[6:-1]
+                        subjects.append({
+                            'name': subject,
+                            'paper_count': doc_count
+                        })
+                else:
+                    subjects = []
+                new_author_dict['subjects'] = subjects
+
+            if query.selector.any_of_fields(AuthorDataSelector.parse_obj({
+                'institution_current': {
+                    'name': True,
+                    'id': True,
+                    'processed': True
+                }
+            })):
+                new_institution = {}
+                if AuthorDataSelector.parse_obj({'institution_current': {'name': True}}) in query.selector:
+                    new_institution['name'] = author_dict['affiliation']
+                if AuthorDataSelector.parse_obj({'institution_current': {'id': True}}) in query.selector:
+                    new_institution['id'] = author_dict['affiliation_id']
+                if AuthorDataSelector.parse_obj({'institution_current': {'processed': True}}) in query.selector:
+                    processed = []
+                    if author_dict['city'] is not None:
+                        processed.append((author_dict['city'], 'city'))
+                    if author_dict['country'] is not None:
+                        processed.append((author_dict['country'], 'country'))
+                        new_institution['processed'] = processed
+                new_author_dict['institution_current'] = new_institution
+            new_authors.append(model.parse_obj(new_author_dict))
+        return new_authors
 
 
 class InstitutionSearchQueryEngine(
@@ -352,6 +519,14 @@ class InstitutionSearchQueryEngine(
     def __init__(self, api_key:str , institution_token: str, rate_limiter: RateLimiter = RateLimiter(max_requests_per_second = 6), *args, **kwargs):
         self.api_key = api_key
         self.institution_token = institution_token
+        self.available_fields = InstitutionDataSelector.parse_obj({
+            'id': True,
+            'name': True,
+            'name_variants': True,
+            'paper_count': True,
+            'processed': True
+        })
+        self.possible_searches = [self.available_fields]
         super().__init__(rate_limiter, *args, **kwargs)
     
     async def _query_to_awaitable(
@@ -359,6 +534,11 @@ class InstitutionSearchQueryEngine(
         query: InstitutionSearchQuery, 
         client: NewAsyncClient
     ) -> Tuple[Callable[[NewAsyncClient], Awaitable[List[AffiliationSearchResult]]], Dict[str, int]]:
+        
+        if query.selector not in self.available_fields:
+            overselected_fields = self.available_fields.get_values_overselected(query.selector)
+            raise QueryNotSupportedError(overselected_fields)
+        
         affiliation_search_query = institution_query_to_affiliation(query)
         cache_remaining = await get_affiliation_query_remaining_in_cache()
         if cache_remaining > 1:
@@ -375,22 +555,29 @@ class InstitutionSearchQueryEngine(
             return await affiliation_search_on_query(affiliation_search_query, client, self.api_key, self.institution_token)
         return make_coroutine, metadata
     
-    async def _post_process(self, query: PaperSearchQuery, data: List[AffiliationSearchResult]) -> List[InstitutionData]:
+    async def _post_process(self, query: InstitutionSearchQuery, data: List[AffiliationSearchResult]) -> List[InstitutionData]:
+        model = InstitutionData.generate_model_from_selector(query.selector)
         new_papers = []
         for paper in data:
             paper_dict = paper.dict()
             new_paper_dict = {}
-            new_paper_dict['id'] = paper_dict['eid'].split('-')[-1]
-            new_paper_dict['name'] = paper_dict['name']
-            new_paper_dict['name_variants'] = [paper_dict['variant']]
-            new_paper_dict['paper_count'] = paper_dict['documents']
-            processed = []
-            processed.append((paper_dict['name'], 'house'))
-            if paper_dict['city'] is not None:
-                processed.append((paper_dict['city'], 'city'))
-            if paper_dict['country'] is not None:
-                processed.append((paper_dict['country'], 'country'))
-            new_paper = InstitutionData.parse_obj(new_paper_dict)
+            if InstitutionDataSelector(id = True) in query.selector:
+                new_paper_dict['id'] = paper_dict['eid'].split('-')[-1]
+            if InstitutionDataSelector(name = True) in query.selector:
+                new_paper_dict['name'] = paper_dict['name']
+            if InstitutionDataSelector(name_variants = True) in query.selector:
+                new_paper_dict['name_variants'] = [paper_dict['variant']]
+            if InstitutionDataSelector(paper_count = True) in query.selector:
+                new_paper_dict['paper_count'] = paper_dict['documents']
+            if InstitutionDataSelector(processed = True) in query.selector:
+                processed = []
+                processed.append((paper_dict['name'], 'house'))
+                if paper_dict['city'] is not None:
+                    processed.append((paper_dict['city'], 'city'))
+                if paper_dict['country'] is not None:
+                    processed.append((paper_dict['country'], 'country'))
+                new_paper_dict['processed'] = processed
+            new_paper = model.parse_obj(new_paper_dict)
             new_papers.append(new_paper)
         return new_papers
 
@@ -400,11 +587,10 @@ class ScopusBackend(Backend):
         self.api_key = api_key
         self.institution_token = institution_token
     
-    def paper_search_engine(self, full_view: bool = True) -> PaperSearchQueryEngine:
+    def paper_search_engine(self) -> PaperSearchQueryEngine:
         return PaperSearchQueryEngine(
             api_key = self.api_key, 
-            institution_token = self.institution_token,
-            full_view = full_view
+            institution_token = self.institution_token
         )
 
     def author_search_engine(self) -> AuthorSearchQueryEngine:
