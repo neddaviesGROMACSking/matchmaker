@@ -1,21 +1,11 @@
 from pydantic import BaseModel
 from typing import Generic, Union, List, Optional, Tuple, Dict, TypeVar
-from matchmaker.query_engine.id_types import PaperID
-from matchmaker.query_engine.selector_types import InstitutionDataSelector, AuthorDataSelector, PaperDataSelector, BaseSelector
-
+from matchmaker.query_engine.id_types import PaperIDDef, PaperID
+from matchmaker.query_engine.selector_types import InstitutionDataSelector, AuthorDataSelector, PaperDataSelector
+from matchmaker.query_engine.abstract_selector_types import BaseSelector
+from matchmaker.query_engine.abstract_data_types import BaseData
 
 SelectorType = TypeVar('SelectorType', bound = BaseSelector)
-
-class BaseData(BaseModel, Generic[SelectorType]):
-    @classmethod
-    def generate_model_from_selector(cls, definition: BaseModel, selector: Union[bool, SelectorType]):
-        if isinstance(selector, bool):
-            if selector:
-                return type(cls.__name__, (definition, cls), {}) 
-            else:
-                return cls
-        else:
-            return selector.generate_model(cls, definition)
 
 class InstitutionDataDef(BaseModel):
     name: Optional[str] = None
@@ -24,12 +14,12 @@ class InstitutionDataDef(BaseModel):
     paper_count: Optional[int] = None
     name_variants: Optional[List[str]] = None
 
-class BaseInstitutionData(BaseData[InstitutionDataSelector]):
+InstitutionDataDef.__name__ = 'InstitutionData'
+
+class InstitutionData(BaseData[InstitutionDataSelector]):
     @classmethod
     def generate_model_from_selector(cls, selector: Union[bool, InstitutionDataSelector] = True):
         return super().generate_model_from_selector(InstitutionDataDef, selector)
-                
-InstitutionData = BaseInstitutionData.generate_model_from_selector()
 
 class AuthorDataDef(BaseModel):
     class Name(BaseModel):
@@ -43,32 +33,40 @@ class AuthorDataDef(BaseModel):
     id: Optional[str] = None
     name_variants: List[Name] = []
     subjects: List[Subject] = []
-    institution_current: Optional[InstitutionData] = None
-    other_institutions: List[InstitutionData] = []
+    institution_current: Optional[InstitutionDataDef] = None
+    other_institutions: List[InstitutionDataDef] = []
     paper_count: Optional[int] = None
-    paper_ids: Optional[List[PaperID]] = []
+    paper_ids: Optional[List[PaperIDDef]] = []
 
-class BaseAuthorData(BaseData[AuthorDataSelector]):
+AuthorDataDef.__name__ = 'AuthorData'
+
+class AuthorData(BaseData[AuthorDataSelector]):
     @classmethod
     def generate_model_from_selector(cls, selector: Union[bool, SelectorType] = True):
-        return super().generate_model_from_selector(AuthorDataDef, selector)
-
-AuthorData = BaseAuthorData.generate_model_from_selector()
+        return super().generate_model_from_selector(
+            AuthorDataDef, 
+            selector,
+            {
+                'institution_current': InstitutionData,
+                'other_institutions': InstitutionData,
+                'paper_ids': PaperID
+            }
+        )
 
 class Topic(BaseModel):
     descriptor: Optional[str]
     qualifier: Optional[str]
 
 class SubPaperData(BaseModel):
-    paper_id: PaperID
+    paper_id: PaperIDDef
     title: str
-    authors: List[AuthorData]
+    authors: List[AuthorDataDef]
     year: Optional[int]
     source_title: str
     source_title_id: Optional[str] = None
     source_title_abr: Optional[str] = None
     abstract: Optional[Union[str, List[Tuple[Optional[str], Optional[str]]]]] = None
-    institutions: Optional[List[InstitutionData]] = None
+    institutions: Optional[List[InstitutionDataDef]] = None
     keywords: Optional[List[str]] = None
     topics: Optional[List[Topic]] = None
 
@@ -76,9 +74,19 @@ class PaperDataDef(SubPaperData):
     references: Optional[Union[int, List[SubPaperData]]] = None
     cited_by: Optional[Union[int, List[SubPaperData]]] = None
 
-class BasePaperData(BaseData[PaperDataSelector]):
+PaperDataDef.__name__ = 'PaperData'
+
+class PaperData(BaseData[PaperDataSelector]):
     @classmethod
     def generate_model_from_selector(cls, selector: Union[bool, SelectorType] = True):
-        return super().generate_model_from_selector(PaperDataDef, selector)
-
-PaperData = BasePaperData.generate_model_from_selector()
+        return super().generate_model_from_selector(
+            PaperDataDef, 
+            selector,
+            {
+                'institutions': InstitutionData,
+                'authors': AuthorData,
+                'institution_current': InstitutionData,
+                'other_institutions': InstitutionData,
+                'paper_id': PaperID
+            }
+        )

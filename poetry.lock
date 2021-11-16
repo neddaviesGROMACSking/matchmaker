@@ -380,6 +380,14 @@ notebook = ["ipywidgets (>=6)"]
 telegram = ["requests"]
 
 [[package]]
+name = "type-reconstructor"
+version = "0.1.0"
+description = ""
+category = "main"
+optional = false
+python-versions = ">=3.9,<4.0"
+
+[[package]]
 name = "typer"
 version = "0.4.0"
 description = "Typer, build great CLIs. Easy to code. Based on Python type hints."
@@ -440,7 +448,7 @@ multidict = ">=4.0"
 [metadata]
 lock-version = "1.1"
 python-versions = "^3.9"
-content-hash = "df397f7af130f3d7cd0cef5ec39b0d237701e3c7617b0d29aacbb19ecc0e6e09"
+content-hash = "9f95ea31a36fb4b18e02c7b11c14741afe97769d77caa59b9443d5281ea4a9de"
 
 [metadata.files]
 aiohttp = [
@@ -733,6 +741,10 @@ toml = [
 tqdm = [
     {file = "tqdm-4.62.3-py2.py3-none-any.whl", hash = "sha256:8dd278a422499cd6b727e6ae4061c40b48fce8b76d1ccbf5d34fca9b7f925b0c"},
     {file = "tqdm-4.62.3.tar.gz", hash = "sha256:d359de7217506c9851b7869f3708d8ee53ed70a1b8edbba4dbcb47442592920d"},
+]
+type-reconstructor = [
+    {file = "type_reconstructor-0.1.0-py3-none-any.whl", hash = "sha256:0d3f8114bd6ddce3695624909feca2e2eafe14d4edf9c4b82984f273c9a5705f"},
+    {file = "type_reconstructor-0.1.0.tar.gz", hash = "sha256:2eab66a2cdc49b3e7766020d5e237bf17c41fd2ed5e1a123ffc2e48fbc62981d"},
 ]
 typer = [
     {file = "typer-0.4.0-py3-none-any.whl", hash = "sha256:d81169725140423d072df464cad1ff25ee154ef381aaf5b8225352ea187ca338"},
