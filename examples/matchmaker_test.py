@@ -5,6 +5,7 @@ from matchmaker.query_engine.backends.pubmed import PubmedBackend
 from matchmaker.query_engine.backends.scopus import ScopusBackend
 from secret import pubmed_api_key, scopus_api_key, scopus_inst_token
 import asyncio
+
 op_scopus_backend = OptimisedScopusBackend(
     ScopusBackend(
         scopus_api_key,
@@ -20,10 +21,13 @@ op_scopus_query_engine = op_scopus_backend.paper_search_engine()
 op_scopus_query_engine = op_scopus_backend.paper_search_engine()
 
 id2 = '7404572266' # Jeremy Green
-id1 = '7404572266' # Jeremy Green 89.70
-#id1 = '57202528457' # Random author Martin Green 86.37
-#id1 = '39560905300' # Random co author of jeremy green 83.33
-#id1 = '22988279600' #Albert Einstein 75.76
+id1 = '7404572266' # Jeremy Green med: 90.6 av: 80.9 av2: 71.7 # av_sing: 79.8
+id1 = '57202528457' # Martin Green makes solar cells med: 92.5 av: 84.7 av2: 75.7 # av_sing: 84.8
+id1 = '39560905300' # Random co author of jeremy green med: 90.2 av: 80.9 av2: 70.8 (small doc count) # av_sing: 81.4
+id1 = '22988279600' #Albert Einstein med: 82.2 av: 72.1 av2: 62.0 # av_sing: 75.1
+id1 = '7402259702' # William Green laser physicist med: 90.8 av: 80.6 av2: 71.5  # av_sing: 82.6
+id1 = '24605680400' # James Smith colleague of Jeremy Green med: 90.7 av: 82.6 av2: 72.6  # av_sing: 82.4
+id1 = '16445638600' # Babette Babich Philosopher med: 82.5 av: 67.8 av2: 58.5  # av_sing: 80.4
 paper_search1 = PaperSearchQuery.parse_obj({
     'query':{
         'tag': 'and',
