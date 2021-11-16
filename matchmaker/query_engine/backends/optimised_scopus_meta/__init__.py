@@ -101,10 +101,11 @@ class PaperSearchQueryEngine(BasePaperSearchQueryEngine[List[PaperData]]):
         standard_native_query = await self.scopus_paper_search.get_native_query(standard_query) 
         standard_native_request_no = standard_native_query.metadata['scopus_search']
         # For pubmed it's always the same, so this can be a good estimate
-        pubmed_native_query = await self.pubmed_paper_search.get_native_query(standard_query)
+        # TODO Get estimate some other way - standard query not always supported by pubmed
+        #pubmed_native_query = await self.pubmed_paper_search.get_native_query(standard_query)
         metadata = {
             'scopus_search': full_native_request_no + standard_native_request_no,
-            **pubmed_native_query.metadata
+            #**pubmed_native_query.metadata
         }
         pubmed_selector = PaperDataSelector.generate_subset_selector(query.selector, self.pubmed_paper_search.available_fields)
         

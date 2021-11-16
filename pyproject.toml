@@ -16,6 +16,7 @@ aiohttp = "^3.7.4"
 pybliometrics = "^3.0.1"
 typing-extensions = "^3.10.0"
 type-reconstructor = "^0.1.0"
+gensim = "^4.1.2"
 
 [tool.poetry.dev-dependencies]
 pytest = "^6.0.0"

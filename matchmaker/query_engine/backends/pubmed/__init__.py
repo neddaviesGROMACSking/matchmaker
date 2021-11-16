@@ -109,10 +109,8 @@ def paper_query_to_esearch(query: PaperSearchQuery):
         new_query_dict,
         elocationid = 'doi'
     )
-    try:
-        return PubmedESearchQuery.parse_obj(new_query_dict)
-    except ValidationError as e:
-        raise QueryNotSupportedError(e.raw_errors)
+    return PubmedESearchQuery.parse_obj(new_query_dict)
+
 def author_query_to_esearch(query: AuthorSearchQuery):
     # TODO convert topic to elocation
     # convert id.pubmed to pmid
