@@ -1,4 +1,4 @@
-from matchmaker.matching_engine import MatchingEngine, AuthorGetter, AbstractToAbstractCorrelationFunction
+from matchmaker.matching_engine import MatchingEngine, AuthorGetter, AbstractToAbstractCorrelationFunction, AbstractToAbstractNonElementWise
 from matchmaker.query_engine.data_types import InstitutionData
 from matchmaker.query_engine.query_types import PaperSearchQuery, AuthorSearchQuery
 from matchmaker.query_engine.selector_types import AuthorDataSelector, InstitutionDataSelector
@@ -58,7 +58,7 @@ matching_engine = MatchingEngine(
         AuthorDataSelector(id= True, preferred_name=True)
     ),
     correlation_functions=[
-        AbstractToAbstractCorrelationFunction(op_scopus_paper)
+        AbstractToAbstractNonElementWise(op_scopus_paper)
     ]
 )
 
@@ -70,3 +70,10 @@ async def main():
     return await matching_engine(name1, name2)
 
 results = asyncio.run(main())
+import numpy as np
+dtype = [('Author1', '<U32'), ('Author2', '<U32'), ('Match', float)]
+test = np.array(results)
+final = np.sort(np.array(results, dtype = dtype),order='Match')
+print(tabulate(final, headers=['Author1', 'Author2', 'Match Rating']))
+
+#print(results)

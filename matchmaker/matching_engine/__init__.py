@@ -15,6 +15,7 @@ from numpy.typing import ArrayLike
 from matchmaker.matching_engine.abstract_to_abstract import calculate_set_similarity
 AuthorMatrix = ArrayLike
 
+
 class CorrelationFunction:
     backend: Backend
     def __init__(self, backend) -> None:
@@ -23,6 +24,77 @@ class CorrelationFunction:
     async def __call__(self, author_data1: List[AuthorData], author_data2: List[AuthorData]) -> AuthorMatrix:
         raise NotImplementedError
 
+class AbstractToAbstractNonElementWise(CorrelationFunction):
+    def __init__(self, paper_query_engine: SlightlyLessAbstractQueryEngine) -> None:
+        self.paper_query_engine = paper_query_engine
+    async def __call__(self, author_data1: List[AuthorData], author_data2: List[AuthorData]) -> AuthorMatrix:
+        def process_paper_abstracts(paper: PaperData) -> str:
+            abstract = paper.abstract
+            if isinstance(abstract, list):
+                return ' . '.join([text for _, text in abstract])
+            else:
+                return abstract
+        def bin_items(items: List[str], bin_limit: int) -> List[List[str]]:
+            binned_items = []
+            current_bin_index = 0
+            for i in items:
+                if current_bin_index >= len(binned_items):
+                    binned_items.append([])
+                binned_items[current_bin_index].append(i)
+                if len(binned_items[current_bin_index]) >= bin_limit:
+                    current_bin_index += 1
+            return binned_items
+
+        async def get_author_papers(authors: List[AuthorData]) -> List[List[PaperData]]:
+            def group_results_by_author_id(author_ids: List[str], results:List[PaperData]) -> List[List[PaperData]]:
+                def get_results_matching_author(author_id: str, results: List[PaperData]) -> List[PaperData]:
+                    matched_results = []
+                    for result in results:
+                        relevant_ids = [author.id for author in result.authors]
+                        if author_id in relevant_ids:
+                            matched_results.append(result)
+                    return matched_results
+                binned_results = []
+                for author_id in author_ids:
+                    binned_results.append(get_results_matching_author(author_id, results))
+                return binned_results
+            authors_ids = [author.id for author in authors]
+            binned_authors = bin_items(authors_ids, 25)
+            new_results = []
+            for id_set in binned_authors:
+                query_dict = {
+                    'query': {
+                        'tag': 'or',
+                        'fields_': [{
+                            'tag': 'authorid',
+                            'operator': {
+                                'tag': 'equal',
+                                'value': auth_id
+                            }
+                        } for auth_id in id_set]
+                    },
+                    'selector': {
+                        'paper_id': True,
+                        'abstract': True,
+                        'authors': {
+                            'id': True
+                        }
+                    }
+                }
+                new_results += await self.paper_query_engine(PaperSearchQuery.parse_obj(query_dict))
+            return group_results_by_author_id(authors_ids, new_results)
+
+        author_matrix = np.zeros((len(author_data1), len(author_data2)))
+        author_papers_1 = await get_author_papers(author_data1)
+        author_papers_2 = await get_author_papers(author_data2)
+        for i, author1 in enumerate(author_data1):
+            asso_papers_1 = author_papers_1[i]
+            abstract_set1 = [process_paper_abstracts(paper) for paper in asso_papers_1 if paper.abstract is not None]
+            for j, author2 in enumerate(author_data2):
+                asso_papers_2 = author_papers_2[j]
+                abstract_set2 = [process_paper_abstracts(paper) for paper in asso_papers_2 if paper.abstract is not None]      
+                author_matrix[i][j] = calculate_set_similarity(abstract_set1, abstract_set2)
+        return author_matrix
 
 class ElementCorrelationFunction(CorrelationFunction):
     async def correlate_authors(self, author1: AuthorData, author2: AuthorData) -> float:
@@ -34,6 +106,7 @@ class ElementCorrelationFunction(CorrelationFunction):
                 author_matrix[i][j] = await self.correlate_authors(author1, author2)
         return author_matrix
 
+# TODO make abstract to abstract more efficient by concatenating paper queries together
 class AbstractToAbstractCorrelationFunction(ElementCorrelationFunction):
     def __init__(self, paper_query_engine: SlightlyLessAbstractQueryEngine) -> None:
         self.paper_query_engine = paper_query_engine
@@ -208,14 +281,24 @@ class MatchingEngine:
             if stacked_author_matrix is None:
                 stacked_author_matrix = np.zeros([len(self.correlation_functions)]+ list(auth_mat.shape))
             stacked_author_matrix[i] = auth_mat
-        return stacked_author_matrix
+        return stacked_author_matrix, author_data1, author_data2
     
     async def process_matches(
         self,
-        stacked_author_matrix: StackedAuthorMatrix
-    ) -> MatchMatrix:
-        return stacked_author_matrix
+        stacked_author_matrix: StackedAuthorMatrix,
+        author_data1: List[AuthorData], 
+        author_data2: List[AuthorData]
+    ) -> List[Tuple[str,str,float]]:
+        final_results: List[Tuple[str,str,float]] = []
+        for i, author1 in enumerate(author_data1):
+            for j, author2 in enumerate(author_data2):
+                name1 = author1.preferred_name.given_names + ' ' + author1.preferred_name.surname
+                name2 = author2.preferred_name.given_names + ' ' + author2.preferred_name.surname
+                correlation = np.average(stacked_author_matrix[:,i,j])
+                final_results.append((name1,name2,correlation))
+                
+        return final_results
     
     async def __call__(self, institution_name1: str, institution_name2: str) -> object:
-        stacked_mat = await self.make_stacked_author_matrix(institution_name1, institution_name2)
-        return await self.process_matches(stacked_mat)
+        stacked_mat, author_data1, author_data2 = await self.make_stacked_author_matrix(institution_name1, institution_name2)
+        return await self.process_matches(stacked_mat, author_data1, author_data2)

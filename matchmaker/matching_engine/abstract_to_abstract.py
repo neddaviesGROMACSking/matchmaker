@@ -60,6 +60,7 @@ def produce_similarities(
         index.save(f'/tmp/{hash_value}.index')
     """
     index = similarities.MatrixSimilarity(lsi[corpus])
+    
     vec_bow_texts = generate_texts(abstract_set2, excluded_words, remove_singleton_words=remove_singleton_words)
     vec_corpus = [dictionary.doc2bow(vec_bow_text) for vec_bow_text in vec_bow_texts] 
     vec_lsi = lsi[vec_corpus]  # convert the query to LSI space
@@ -96,6 +97,8 @@ def calculate_set_similarity(
     abstract_set1: List[str], 
     abstract_set2: List[str]
 ) -> float:
+    if abstract_set1 ==[] or abstract_set2 == []:
+        return 0
     value1 = calculate_directional_set_similarity(abstract_set1, abstract_set2)
     value2 = calculate_directional_set_similarity(abstract_set2, abstract_set1)
     return (value1+value2)/2
