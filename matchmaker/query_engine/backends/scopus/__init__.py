@@ -55,7 +55,8 @@ def paper_query_to_scopus(query: PaperSearchQuery) -> ScopusSearchQuery:
         srctitle = 'journal',
         authorkeyword = 'keyword',
         keyword = 'topic',
-        affiliation = 'institution'
+        affiliation = 'institution',
+        affiliationid = 'institutionid'
     )
     model_tags = get_available_model_tags(ScopusSearchQuery)
     check_model_tags(model_tags, new_query_dict)

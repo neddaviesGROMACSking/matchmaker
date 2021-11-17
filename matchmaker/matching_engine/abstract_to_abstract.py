@@ -46,7 +46,6 @@ def produce_similarities(
         return hash_value
 
     texts = generate_texts(abstract_set1, excluded_words, remove_singleton_words=remove_singleton_words)
-    print(texts)
     dictionary = corpora.Dictionary(texts)
     corpus = [dictionary.doc2bow(text) for text in texts]
     lsi = models.LsiModel(corpus, id2word=dictionary, num_topics=2)

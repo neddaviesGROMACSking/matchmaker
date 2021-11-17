@@ -1,5 +1,5 @@
 
-from matchmaker.query_engine.data_types import InstitutionData, AuthorData
+from matchmaker.query_engine.data_types import InstitutionData, AuthorData, PaperData
 from matchmaker.query_engine.query_types import Institution, PaperSearchQuery, InstitutionSearchQuery, AuthorSearchQuery
 from matchmaker.query_engine.backend import Backend
 from matchmaker.query_engine.slightly_less_abstract import SlightlyLessAbstractQueryEngine
@@ -11,19 +11,21 @@ from matchmaker.query_engine.backends import BaseInstitutionSearchQueryEngine, B
 from matchmaker.query_engine.backends.metas import BaseAuthorSearchQueryEngine as BaseMetaAuthorSearchQueryEngine
 from matchmaker.query_engine.backends.metas import BaseInstitutionSearchQueryEngine as BaseMetaInstitutionSearchQueryEngine
 import numpy as np
-
-AuthorMatrix = object
+from numpy.typing import ArrayLike
+from matchmaker.matching_engine.abstract_to_abstract import calculate_set_similarity
+AuthorMatrix = ArrayLike
 
 class CorrelationFunction:
     backend: Backend
     def __init__(self, backend) -> None:
+        self.backend = backend
         pass
     async def __call__(self, author_data1: List[AuthorData], author_data2: List[AuthorData]) -> AuthorMatrix:
         raise NotImplementedError
 
 
 class ElementCorrelationFunction(CorrelationFunction):
-    async def correlate_authors(self, author1: AuthorData, author2: AuthorData):
+    async def correlate_authors(self, author1: AuthorData, author2: AuthorData) -> float:
         raise NotImplementedError
     async def __call__(self, author_data1: List[AuthorData], author_data2: List[AuthorData]) -> AuthorMatrix:
         author_matrix = np.zeros((len(author_data1), len(author_data2)))
@@ -32,11 +34,52 @@ class ElementCorrelationFunction(CorrelationFunction):
                 author_matrix[i][j] = await self.correlate_authors(author1, author2)
         return author_matrix
 
+class AbstractToAbstractCorrelationFunction(ElementCorrelationFunction):
+    def __init__(self, paper_query_engine: SlightlyLessAbstractQueryEngine) -> None:
+        self.paper_query_engine = paper_query_engine
+    async def correlate_authors(self, author1: AuthorData, author2: AuthorData) -> float:
+        def process_paper_abstracts(paper: PaperData) -> str:
+            abstract = paper.abstract
+            if isinstance(abstract, list):
+                return ' . '.join([text for _, text in abstract])
+            else:
+                return abstract
+        #get papers for each author
+        author1_id = author1.id
+        author2_id = author2.id
+        paper_query_1 = PaperSearchQuery.parse_obj({
+            'query':{
+                'tag': 'authorid',
+                'operator': {
+                    'tag': 'equal',
+                    'value': author1_id
+                },
+            },
+            'selector': {
+                'paper_id': True,
+                'abstract': True
+            }
+        })
+        papers_1 = await self.paper_query_engine(paper_query_1)
+        paper_query_2 = PaperSearchQuery.parse_obj({
+            'query':{
+                'tag': 'authorid',
+                'operator': {
+                    'tag': 'equal',
+                    'value': author2_id
+                },
+            },
+            'selector': {
+                'paper_id': True,
+                'abstract': True
+            }
+        })
+        papers_2 = await self.paper_query_engine(paper_query_2)
+        abstract_set1 = [process_paper_abstracts(paper) for paper in papers_1 if paper.abstract is not None]
+        abstract_set2 = [process_paper_abstracts(paper) for paper in papers_2 if paper.abstract is not None]
+        return calculate_set_similarity(abstract_set1, abstract_set2)
 
 
-
-class AbstractMatchingEngine:
-    pass
 
 class AbstractAuthorGetter:
     inst_selector: InstitutionDataSelector
@@ -60,11 +103,15 @@ class AuthorGetter(AbstractAuthorGetter, Generic[AuthorEngine, InstitutionEngine
         self, 
         institution_query_engine: InstitutionEngine, 
         author_query_engine: AuthorEngine,
-        choose_institution_callback: Callable[[List[InstitutionData]], str]
+        choose_institution_callback: Callable[[List[InstitutionData]], str],
+        inst_selector: InstitutionDataSelector,
+        author_selector: AuthorDataSelector
     ) -> None:
         self.institution_query_engine = institution_query_engine
         self.author_query_engine = author_query_engine
         self.choose_institution_callback = choose_institution_callback
+        self.inst_selector = inst_selector
+        self.author_selector = author_selector
     async def get_institution_data_from_name(self, institution_name: str, inst_selector) -> List[InstitutionData]:
         institution_query = InstitutionSearchQuery.parse_obj({
             'query':{
@@ -85,22 +132,37 @@ class AuthorGetter(AbstractAuthorGetter, Generic[AuthorEngine, InstitutionEngine
             return relevant_institution.id
         else:
             return self.choose_institution_callback(data)
-    async def get_associated_authors(self, institution_id: str, author_selector) -> List[AuthorData]:
+    async def get_associated_authors(self, institution_id: str, author_selector) -> List[AuthorData]:        
         author_query = AuthorSearchQuery.parse_obj({
             'query':{
-                'tag': 'institutionid',
-                'operator': {
-                    'tag': 'equal',
-                    'value': institution_id
-                },
+                'tag': 'and',
+                'fields_': [
+                    {
+                        'tag': 'institutionid',
+                        'operator': {
+                            'tag': 'equal',
+                            'value': institution_id
+                        }
+                    },
+                    {
+                        'tag': 'year',
+                        'operator': {
+                            'tag': 'range',
+                            'lower_bound': '2018',
+                            'upper_bound': '2022'
+                        }
+                    }
+                ]
             },
             'selector': author_selector.dict()
         })
         return await self.author_query_engine(author_query)
 
+class AbstractMatchingEngine:
+    pass
 
-StackedAuthorMatrix = object
-MatchMatrix = object
+StackedAuthorMatrix =ArrayLike
+MatchMatrix = ArrayLike
 class MatchingEngine:
     author_matrix: AuthorMatrix
     def __init__(

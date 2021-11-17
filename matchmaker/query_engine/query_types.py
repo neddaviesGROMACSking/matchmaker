@@ -143,6 +143,7 @@ class PaperSearchQueryInner(BaseModel):
         Journal,
         Abstract,
         Institution,
+        InstitutionID,
         Keyword,
         Year,
         Topic],
