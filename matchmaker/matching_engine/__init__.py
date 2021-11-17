@@ -13,6 +13,7 @@ from matchmaker.query_engine.backends.metas import BaseInstitutionSearchQueryEng
 import numpy as np
 from numpy.typing import ArrayLike
 from matchmaker.matching_engine.abstract_to_abstract import calculate_set_similarity
+from tabulate import tabulate #type:ignore
 AuthorMatrix = ArrayLike
 
 
@@ -24,7 +25,7 @@ class CorrelationFunction:
     async def __call__(self, author_data1: List[AuthorData], author_data2: List[AuthorData]) -> AuthorMatrix:
         raise NotImplementedError
 
-class AbstractToAbstractNonElementWise(CorrelationFunction):
+class AbstractToAbstractCorrelationFunction(CorrelationFunction):
     def __init__(self, paper_query_engine: SlightlyLessAbstractQueryEngine) -> None:
         self.paper_query_engine = paper_query_engine
     async def __call__(self, author_data1: List[AuthorData], author_data2: List[AuthorData]) -> AuthorMatrix:
@@ -105,53 +106,6 @@ class ElementCorrelationFunction(CorrelationFunction):
             for j, author2 in enumerate(author_data2):
                 author_matrix[i][j] = await self.correlate_authors(author1, author2)
         return author_matrix
-
-# TODO make abstract to abstract more efficient by concatenating paper queries together
-class AbstractToAbstractCorrelationFunction(ElementCorrelationFunction):
-    def __init__(self, paper_query_engine: SlightlyLessAbstractQueryEngine) -> None:
-        self.paper_query_engine = paper_query_engine
-    async def correlate_authors(self, author1: AuthorData, author2: AuthorData) -> float:
-        def process_paper_abstracts(paper: PaperData) -> str:
-            abstract = paper.abstract
-            if isinstance(abstract, list):
-                return ' . '.join([text for _, text in abstract])
-            else:
-                return abstract
-        #get papers for each author
-        author1_id = author1.id
-        author2_id = author2.id
-        paper_query_1 = PaperSearchQuery.parse_obj({
-            'query':{
-                'tag': 'authorid',
-                'operator': {
-                    'tag': 'equal',
-                    'value': author1_id
-                },
-            },
-            'selector': {
-                'paper_id': True,
-                'abstract': True
-            }
-        })
-        papers_1 = await self.paper_query_engine(paper_query_1)
-        paper_query_2 = PaperSearchQuery.parse_obj({
-            'query':{
-                'tag': 'authorid',
-                'operator': {
-                    'tag': 'equal',
-                    'value': author2_id
-                },
-            },
-            'selector': {
-                'paper_id': True,
-                'abstract': True
-            }
-        })
-        papers_2 = await self.paper_query_engine(paper_query_2)
-        abstract_set1 = [process_paper_abstracts(paper) for paper in papers_1 if paper.abstract is not None]
-        abstract_set2 = [process_paper_abstracts(paper) for paper in papers_2 if paper.abstract is not None]
-        return calculate_set_similarity(abstract_set1, abstract_set2)
-
 
 
 class AbstractAuthorGetter:
@@ -288,17 +242,28 @@ class MatchingEngine:
         stacked_author_matrix: StackedAuthorMatrix,
         author_data1: List[AuthorData], 
         author_data2: List[AuthorData]
-    ) -> List[Tuple[str,str,float]]:
-        final_results: List[Tuple[str,str,float]] = []
+    ) -> List[Tuple[AuthorData,AuthorData,float]]:
+        # TODO Are author_datas being duplicated? Investigate
+        final_results: List[Tuple[AuthorData,AuthorData,float]] = []
         for i, author1 in enumerate(author_data1):
             for j, author2 in enumerate(author_data2):
-                name1 = author1.preferred_name.given_names + ' ' + author1.preferred_name.surname
-                name2 = author2.preferred_name.given_names + ' ' + author2.preferred_name.surname
                 correlation = np.average(stacked_author_matrix[:,i,j])
-                final_results.append((name1,name2,correlation))
-                
+                final_results.append((author1,author2,correlation))
         return final_results
     
-    async def __call__(self, institution_name1: str, institution_name2: str) -> object:
+    async def __call__(self, institution_name1: str, institution_name2: str) -> List[Tuple[AuthorData,AuthorData,float]]:
         stacked_mat, author_data1, author_data2 = await self.make_stacked_author_matrix(institution_name1, institution_name2)
         return await self.process_matches(stacked_mat, author_data1, author_data2)
+
+
+def display_matches(
+    matches: List[Tuple[AuthorData,AuthorData,float]]
+):
+    final_results = []
+    for author1, author2, correlation in matches:
+        name1 = author1.preferred_name.given_names + ' ' + author1.preferred_name.surname
+        name2 = author2.preferred_name.given_names + ' ' + author2.preferred_name.surname
+        final_results.append((name1,name2,correlation))
+    dtype = [('Author1', '<U32'), ('Author2', '<U32'), ('Match', float)]
+    final = np.sort(np.array(final_results, dtype = dtype),order='Match')
+    print(tabulate(final, headers=['Author1', 'Author2', 'Match Rating']))
