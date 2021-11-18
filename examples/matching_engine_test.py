@@ -29,7 +29,7 @@ def choose_institution_callback(institution_data: List[InstitutionData]) -> str:
     for i, inst in enumerate(institution_data):
         inner_list = []
         inner_list.append(i)
-        inner_list.append(inst.id)
+        inner_list.append(inst.id.scopus_id)
         inner_list.append(inst.name)
         total_list.append(inner_list)
     print('Choose an institution:')
@@ -46,7 +46,7 @@ def choose_institution_callback(institution_data: List[InstitutionData]) -> str:
             continue
         else:
             break
-    return institution_data[relevant_no].id
+    return institution_data[relevant_no].id.scopus_id
 
 
 matching_engine = MatchingEngine(
@@ -54,8 +54,14 @@ matching_engine = MatchingEngine(
         op_scopus_inst,
         op_scopus_author,
         choose_institution_callback,
-        InstitutionDataSelector(id = True, name= True),
-        AuthorDataSelector(id= True, preferred_name=True)
+        InstitutionDataSelector.parse_obj({
+            'id': {'scopus_id': True}, 
+            'name': True
+        }),
+        AuthorDataSelector.parse_obj({
+            'id': {'scopus_id': True}, 
+            'preferred_name': True
+        })
     ),
     correlation_functions=[
         AbstractToAbstractCorrelationFunction(op_scopus_paper)

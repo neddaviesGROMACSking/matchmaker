@@ -79,7 +79,7 @@ class AbstractToAbstractCorrelationFunction(CorrelationFunction):
                         'paper_id': True,
                         'abstract': True,
                         'authors': {
-                            'id': True
+                            'id': {'scopus_id': True}
                         }
                     }
                 }
@@ -157,10 +157,10 @@ class AuthorGetter(AbstractAuthorGetter, Generic[AuthorEngine, InstitutionEngine
             raise ValueError('Institution not found')
         elif len(data) == 1:
             relevant_institution = data[0]
-            return relevant_institution.id
+            return relevant_institution.id.scopus_id
         else:
             return self.choose_institution_callback(data)
-    async def get_associated_authors(self, institution_id: str, author_selector) -> List[AuthorData]:        
+    async def get_associated_authors(self, institution_id: str, author_selector) -> List[AuthorData]:
         author_query = AuthorSearchQuery.parse_obj({
             'query':{
                 'tag': 'and',
@@ -169,7 +169,9 @@ class AuthorGetter(AbstractAuthorGetter, Generic[AuthorEngine, InstitutionEngine
                         'tag': 'institutionid',
                         'operator': {
                             'tag': 'equal',
-                            'value': institution_id
+                            'value': {
+                                'scopus_id': institution_id
+                            }
                         }
                     },
                     {
