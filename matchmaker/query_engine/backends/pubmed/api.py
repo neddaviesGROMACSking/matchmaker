@@ -5,7 +5,7 @@ from urllib.parse import quote_plus
 import xml.etree.ElementTree as xml_parse
 
 from aiohttp import ClientSession
-from matchmaker.query_engine.query_types import (
+from matchmaker.query_engine.types.query import (
     Abstract,
     And,
     AuthorName,

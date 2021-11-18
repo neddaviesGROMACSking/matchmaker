@@ -35,14 +35,14 @@ from matchmaker.query_engine.backends.tools import (
     get_available_model_tags,
     check_model_tags
 )
-from matchmaker.query_engine.data_types import AuthorData, InstitutionData, PaperData
-from matchmaker.query_engine.selector_types import AuthorDataSelector, InstitutionDataSelector, PaperDataSelector
-from matchmaker.query_engine.query_types import (
+from matchmaker.query_engine.types.data import AuthorData, InstitutionData, PaperData
+from matchmaker.query_engine.types.selector import AuthorDataSelector, InstitutionDataSelector, PaperDataSelector
+from matchmaker.query_engine.types.query import (
     AuthorSearchQuery,
     InstitutionSearchQuery,
     PaperSearchQuery,
 )
-import pdb
+
 from matchmaker.query_engine.backends.exceptions import QueryNotSupportedError
 class NotEnoughRequests(Exception):
     pass

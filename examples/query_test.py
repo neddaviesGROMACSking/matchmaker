@@ -1,4 +1,4 @@
-from matchmaker.query_engine.query_types import PaperSearchQuery
+from matchmaker.query_engine.types.query import PaperSearchQuery
 
 d = {
     'query':{

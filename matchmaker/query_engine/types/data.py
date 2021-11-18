@@ -1,6 +1,6 @@
 from pydantic import BaseModel
 from typing import Generic, Union, List, Optional, Tuple, Dict, TypeVar
-from matchmaker.query_engine.selector_types import BaseSelector, InstitutionDataSelector, AuthorDataSelector, PaperDataSelector, PaperIDSelector
+from matchmaker.query_engine.types.selector import BaseSelector, InstitutionDataSelector, AuthorDataSelector, PaperDataSelector, PaperIDSelector
 
 from pydantic import BaseModel
 from typing import Generic, Union, Dict, TypeVar

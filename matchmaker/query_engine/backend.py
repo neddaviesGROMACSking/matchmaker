@@ -1,14 +1,16 @@
-from pydantic import BaseModel
-from typing import Generic, List, Type, TypeVar
+from typing import List
 
-from matchmaker.query_engine.query_types import PaperSearchQuery, \
-        AuthorSearchQuery
-from matchmaker.query_engine.data_types import PaperData, AuthorData
+from matchmaker.query_engine.types.query import PaperSearchQuery, \
+        AuthorSearchQuery, InstitutionSearchQuery
+from matchmaker.query_engine.types.data import PaperData, AuthorData, InstitutionData
 from matchmaker.query_engine.abstract import AbstractQueryEngine
 
 class Backend:
-    def paperSearchEngine(self) -> AbstractQueryEngine[PaperSearchQuery, List[PaperData]]:
+    def PaperSearchEngine(self) -> AbstractQueryEngine[PaperSearchQuery, List[PaperData]]:
         raise NotImplementedError('Calling method on abstract base class')
 
-    def authorSearchEngine(self) -> AbstractQueryEngine[AuthorSearchQuery, List[AuthorData]]:
+    def AuthorSearchEngine(self) -> AbstractQueryEngine[AuthorSearchQuery, List[AuthorData]]:
+        raise NotImplementedError('Calling method on abstract base class')
+
+    def InstitutionSearchEngine(self) -> AbstractQueryEngine[InstitutionSearchQuery, List[InstitutionData]]:
         raise NotImplementedError('Calling method on abstract base class')

@@ -1,11 +1,11 @@
 
-from matchmaker.query_engine.data_types import InstitutionData, AuthorData, PaperData
-from matchmaker.query_engine.query_types import Institution, PaperSearchQuery, InstitutionSearchQuery, AuthorSearchQuery
+from matchmaker.query_engine.types.data import InstitutionData, AuthorData, PaperData
+from matchmaker.query_engine.types.query import Institution, PaperSearchQuery, InstitutionSearchQuery, AuthorSearchQuery
 from matchmaker.query_engine.backend import Backend
 from matchmaker.query_engine.slightly_less_abstract import SlightlyLessAbstractQueryEngine
 from typing import Callable, List, Union, TypeVar, Generic, Tuple
 
-from matchmaker.query_engine.selector_types import  InstitutionDataSelector, AuthorDataSelector
+from matchmaker.query_engine.types.selector import  InstitutionDataSelector, AuthorDataSelector
 #from matchmaker.query_engine.backends.scopus import ScopusInstitutionSearchQueryEngine
 from matchmaker.query_engine.backends import BaseInstitutionSearchQueryEngine, BaseAuthorSearchQueryEngine
 from matchmaker.query_engine.backends.metas import BaseAuthorSearchQueryEngine as BaseMetaAuthorSearchQueryEngine
@@ -14,6 +14,7 @@ import numpy as np
 from numpy.typing import ArrayLike
 from matchmaker.matching_engine.abstract_to_abstract import calculate_set_similarity
 from tabulate import tabulate #type:ignore
+
 AuthorMatrix = ArrayLike
 
 

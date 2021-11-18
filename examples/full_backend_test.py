@@ -1,4 +1,4 @@
-from matchmaker.query_engine.query_types import PaperSearchQuery, AuthorSearchQuery, InstitutionSearchQuery
+from matchmaker.query_engine.types.query import PaperSearchQuery, AuthorSearchQuery, InstitutionSearchQuery
 from matchmaker.query_engine.backends.pubmed import PubmedBackend
 from matchmaker.query_engine.backends.scopus import ScopusBackend
 from secret import pubmed_api_key, scopus_api_key, scopus_inst_token

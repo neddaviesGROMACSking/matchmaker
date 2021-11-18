@@ -1,5 +1,5 @@
 from matchmaker.query_engine.backends.scopus import InstitutionSearchQueryEngine
-from matchmaker.query_engine.query_types import InstitutionSearchQuery
+from matchmaker.query_engine.types.query import InstitutionSearchQuery
 from matchmaker.query_engine.backends import NewAsyncClient, RateLimiter
 import asyncio
 

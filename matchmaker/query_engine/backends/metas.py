@@ -8,8 +8,8 @@ from dataclasses import dataclass
 
 from typing import Awaitable, Callable, Dict, Generic, Optional, Tuple, TypeVar
 
-from matchmaker.query_engine.data_types import AuthorData, PaperData, InstitutionData
-from matchmaker.query_engine.query_types import AuthorSearchQuery, PaperSearchQuery, InstitutionSearchQuery
+from matchmaker.query_engine.types.data import AuthorData, PaperData, InstitutionData
+from matchmaker.query_engine.types.query import AuthorSearchQuery, PaperSearchQuery, InstitutionSearchQuery
 from matchmaker.query_engine.slightly_less_abstract import (
     AbstractNativeQuery,
     SlightlyLessAbstractQueryEngine,

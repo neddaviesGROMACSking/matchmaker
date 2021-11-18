@@ -1,9 +1,9 @@
 from pydantic import BaseModel
 from typing import List, Union, Literal, Optional, Any
 
-from matchmaker.query_engine.query_types import PaperSearchQuery, \
+from matchmaker.query_engine.types.query import PaperSearchQuery, \
         AuthorSearchQuery
-from matchmaker.query_engine.data_types import PaperData, AuthorData
+from matchmaker.query_engine.types.data import PaperData, AuthorData
 from matchmaker.query_engine.slightly_less_abstract import SlightlyLessAbstractQueryEngine
 from matchmaker.query_engine.backend import Backend
 

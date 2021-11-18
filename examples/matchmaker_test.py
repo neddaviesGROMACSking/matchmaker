@@ -1,5 +1,5 @@
 from matchmaker.matching_engine.abstract_to_abstract import calculate_set_similarity
-from matchmaker.query_engine.query_types import PaperSearchQuery, AuthorSearchQuery
+from matchmaker.query_engine.types.query import PaperSearchQuery, AuthorSearchQuery
 from matchmaker.query_engine.backends.optimised_scopus_meta import OptimisedScopusBackend
 from matchmaker.query_engine.backends.pubmed import PubmedBackend
 from matchmaker.query_engine.backends.scopus import ScopusBackend

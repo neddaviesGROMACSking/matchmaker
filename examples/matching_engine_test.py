@@ -1,7 +1,7 @@
 from matchmaker.matching_engine import MatchingEngine, AuthorGetter, AbstractToAbstractCorrelationFunction, display_matches
-from matchmaker.query_engine.data_types import InstitutionData
-from matchmaker.query_engine.query_types import PaperSearchQuery, AuthorSearchQuery
-from matchmaker.query_engine.selector_types import AuthorDataSelector, InstitutionDataSelector
+from matchmaker.query_engine.types.data import InstitutionData
+from matchmaker.query_engine.types.query import PaperSearchQuery, AuthorSearchQuery
+from matchmaker.query_engine.types.selector import AuthorDataSelector, InstitutionDataSelector
 from matchmaker.query_engine.backends.optimised_scopus_meta import OptimisedScopusBackend
 from matchmaker.query_engine.backends.pubmed import PubmedBackend
 from matchmaker.query_engine.backends.scopus import ScopusBackend

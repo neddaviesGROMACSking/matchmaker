@@ -1,5 +1,5 @@
 from matchmaker.query_engine.backends.scopus import ScopusBackend 
-from matchmaker.query_engine.query_types import PaperSearchQuery, AuthorSearchQuery
+from matchmaker.query_engine.types.query import PaperSearchQuery, AuthorSearchQuery
 from matchmaker.query_engine.backends import NewAsyncClient, RateLimiter
 import asyncio
 

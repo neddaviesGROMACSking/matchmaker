@@ -7,7 +7,7 @@ from matchmaker.query_engine.backends.scopus.quota_cache import (
     store_quota_in_cache,
 )
 from matchmaker.query_engine.backends.scopus.utils import create_config
-from matchmaker.query_engine.query_types import (
+from matchmaker.query_engine.types.query import (
     Abstract,
     And,
     AuthorID,

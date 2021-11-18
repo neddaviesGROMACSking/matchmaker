@@ -6,11 +6,15 @@ from typing import Awaitable, Callable, Dict, Generic, Optional, Tuple, TypeVar
 import uuid
 
 from aiohttp import ClientSession, TCPConnector
-from matchmaker.query_engine.data_types import AuthorData, PaperData, InstitutionData
-from matchmaker.query_engine.query_types import AuthorSearchQuery, PaperSearchQuery, InstitutionSearchQuery
 from matchmaker.query_engine.slightly_less_abstract import (
     AbstractNativeQuery,
     SlightlyLessAbstractQueryEngine,
+)
+from matchmaker.query_engine.types.data import AuthorData, InstitutionData, PaperData
+from matchmaker.query_engine.types.query import (
+    AuthorSearchQuery,
+    InstitutionSearchQuery,
+    PaperSearchQuery,
 )
 
 class RateLimiter:

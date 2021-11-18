@@ -2,8 +2,8 @@ from collections.abc import Container
 from numbers import Real
 from typing import Annotated, Generic, List, Literal, Type, TypeVar, Union
 
-from matchmaker.query_engine.data_types import PaperID
-from matchmaker.query_engine.selector_types import (
+from matchmaker.query_engine.types.data import PaperID
+from matchmaker.query_engine.types.selector import (
     AuthorDataAllSelected,
     AuthorDataSelector,
     InstitutionDataAllSelected,

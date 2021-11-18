@@ -33,10 +33,10 @@ from matchmaker.query_engine.backends.pubmed.processors import (
     ProcessedIndividual,
     process_institution,
 )
-from matchmaker.query_engine.backends.tools import replace_dict_tags, replace_ids
-from matchmaker.query_engine.data_types import AuthorData, PaperData
-from matchmaker.query_engine.query_types import AuthorSearchQuery, PaperSearchQuery
-from matchmaker.query_engine.query_types import (
+from matchmaker.query_engine.backends.tools import replace_dict_tags
+from matchmaker.query_engine.types.data import AuthorData, PaperData
+from matchmaker.query_engine.types.query import AuthorSearchQuery, PaperSearchQuery
+from matchmaker.query_engine.types.query import (
     Abstract,
     And,
     AuthorName,
@@ -48,7 +48,7 @@ from matchmaker.query_engine.query_types import (
     Title,
     Year,
 )
-from matchmaker.query_engine.selector_types import (
+from matchmaker.query_engine.types.selector import (
     PaperDataAllSelected,
     PaperDataSelector,
     SubPaperDataAllSelected,
