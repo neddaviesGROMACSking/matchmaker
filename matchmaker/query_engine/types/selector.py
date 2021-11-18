@@ -284,9 +284,17 @@ class PaperIDSelector(BaseSelector['PaperIDSelector']):
     pubmed_id: bool = False
     scopus_id: bool = False
 
+class AuthorIDSelector(BaseSelector['AuthorIDSelector']):
+    pubmed_id: bool = False
+    scopus_id: bool = False
+
+class InstitutionIDSelector(BaseSelector['InstitutionIDSelector']):
+    pubmed_id: bool = False
+    scopus_id: bool = False
+
 class InstitutionDataSelector(BaseSelector['InstitutionDataSelector']):
     name: bool = False
-    id: bool = False
+    id: Union[bool, InstitutionIDSelector] = False
     processed: bool = False
     paper_count: bool = False
     name_variants: bool = False
@@ -300,15 +308,15 @@ InstitutionDataAllSelected = InstitutionDataSelector(
 )
 
 class AuthorDataSelector(BaseSelector['AuthorDataSelector']):
-    class NameSelector(BaseModel):
+    class NameSelector(BaseSelector['NameSelector']):
         surname: bool = False
         given_names: bool = False
         initials: bool = False
-    class SubjectSelector(BaseModel):
+    class SubjectSelector(BaseSelector['SubjectSelector']):
         name: bool = False
         paper_count: bool = False
     preferred_name: Union[bool, NameSelector] = False
-    id: bool = False
+    id: Union[bool, AuthorIDSelector] = False
     name_variants: bool = False
     subjects: Union[bool, SubjectSelector] = False
     institution_current: Union[bool, InstitutionDataSelector] = False
@@ -329,7 +337,7 @@ AuthorDataAllSelected = AuthorDataSelector(
 
 
 
-class TopicSelector(BaseModel):
+class TopicSelector(BaseSelector['TopicSelector']):
     descriptor: bool = False
     qualifier: bool = False
 
