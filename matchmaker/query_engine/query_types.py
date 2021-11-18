@@ -2,7 +2,7 @@ from collections.abc import Container
 from numbers import Real
 from typing import Annotated, Generic, List, Literal, Type, TypeVar, Union
 
-from matchmaker.query_engine.id_types import PaperID
+from matchmaker.query_engine.data_types import PaperID
 from matchmaker.query_engine.selector_types import (
     AuthorDataAllSelected,
     AuthorDataSelector,
@@ -73,6 +73,9 @@ IntPredicate = Union[
 
 # str has __contains__ but isn't a subclass of typing.Container...?
 StringPredicate = Union[EqualPredicate[str], InPredicate[str]]  # type: ignore
+
+
+
 
 
 class Title(BaseModel):

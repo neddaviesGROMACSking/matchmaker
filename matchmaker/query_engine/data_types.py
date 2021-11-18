@@ -1,11 +1,57 @@
 from pydantic import BaseModel
 from typing import Generic, Union, List, Optional, Tuple, Dict, TypeVar
-from matchmaker.query_engine.id_types import PaperIDDef, PaperID
-from matchmaker.query_engine.selector_types import InstitutionDataSelector, AuthorDataSelector, PaperDataSelector
-from matchmaker.query_engine.abstract_selector_types import BaseSelector
-from matchmaker.query_engine.abstract_data_types import BaseData
+from matchmaker.query_engine.selector_types import BaseSelector, InstitutionDataSelector, AuthorDataSelector, PaperDataSelector, PaperIDSelector
+
+from pydantic import BaseModel
+from typing import Generic, Union, Dict, TypeVar
+
+
 
 SelectorType = TypeVar('SelectorType', bound = BaseSelector)
+
+class BaseData(BaseModel, Generic[SelectorType]):
+    @classmethod
+    def generate_model_from_selector(
+        cls, 
+        definition: BaseModel, 
+        selector: Union[bool, SelectorType], 
+        model_mapper: Dict[str, BaseModel] = {}):
+        if isinstance(selector, bool):
+            if selector:
+                return type(cls.__name__, (definition, cls), {}) 
+            else:
+                return cls
+        else:
+            return selector.generate_model(cls, definition, model_mapper)
+
+
+
+SelectorType = TypeVar('SelectorType', bound = BaseSelector)
+
+
+class PaperIDDef(BaseModel):
+    doi: Optional[str] = None
+    pubmed_id: Optional[str] = None
+    scopus_id: Optional[str] = None
+
+PaperIDDef.__name__ = 'PaperID'
+
+class PaperID(BaseData[PaperIDSelector]):
+    def __eq__(self, other) -> bool:
+        common_fields = [i for i in self.__fields__.keys() if i in other.__fields__]
+        for id_type in common_fields:
+            self_id = getattr(self, id_type)
+            other_id = getattr(other, id_type)
+            if other_id is not None and self_id is not None:
+                if self_id == other_id:
+                    return True
+        return False
+    @classmethod
+    def generate_model_from_selector(cls, selector: Union[bool, PaperIDSelector] = True):
+        return super().generate_model_from_selector(
+            PaperIDDef, 
+            selector
+        )
 
 class InstitutionDataDef(BaseModel):
     name: Optional[str] = None
@@ -52,6 +98,9 @@ class AuthorData(BaseData[AuthorDataSelector]):
                 'paper_ids': PaperID
             }
         )
+
+
+
 
 class Topic(BaseModel):
     descriptor: Optional[str]
