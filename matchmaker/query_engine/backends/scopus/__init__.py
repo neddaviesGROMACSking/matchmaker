@@ -46,10 +46,28 @@ class NotEnoughRequests(Exception):
     pass
 
 def convert_author_id(dict_structure):
-    raise NotImplementedError
+    operator = dict_structure['operator']
+    operator_value = operator['value']
+    scopus_id = operator_value['scopus_id']
+    return {
+        'tag': dict_structure['tag'],
+        'operator': {
+            'tag': operator['tag'],
+            'value': scopus_id
+        }
+    }
 
 def convert_institution_id(dict_structure):
-    raise NotImplementedError
+    operator = dict_structure['operator']
+    operator_value = operator['value']
+    scopus_id = operator_value['scopus_id']
+    return {
+        'tag': 'affiliationid',
+        'operator': {
+            'tag': operator['tag'],
+            'value': scopus_id
+        }
+    }
 
 def paper_query_to_scopus(query: PaperSearchQuery) -> ScopusSearchQuery:
     query_dict = query.dict()['query']
@@ -109,7 +127,6 @@ def author_query_to_scopus_author(query: AuthorSearchQuery) -> ScopusAuthorSearc
         query_dict,
         affiliation = 'institution'
     )
-
     new_query_dict = execute_callback_on_tag(new_query_dict, 'author', convert_author)
     new_query_dict = execute_callback_on_tag(new_query_dict, 'authorid', convert_author_id)
     new_query_dict = execute_callback_on_tag(new_query_dict, 'institutionid', convert_institution_id)
@@ -480,7 +497,7 @@ class AuthorSearchQueryEngine(
             author_dict = author.dict()
             new_author_dict = {}
             if AuthorDataSelector.parse_obj({'id': {'scopus_id': True}}) in query.selector:
-                new_author_dict['id'] = author_dict['eid'].split('-')[-1]
+                new_author_dict['id'] = {'scopus_id': author_dict['eid'].split('-')[-1]}
             if query.selector.any_of_fields(AuthorDataSelector.parse_obj({
                 'preferred_name':{
                     'given_names': True,

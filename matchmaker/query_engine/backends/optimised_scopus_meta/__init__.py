@@ -358,7 +358,7 @@ class AuthorSearchQueryEngine(BaseAuthorSearchQueryEngine[List[AuthorData]]):
                                     if inst_id is not None:
                                         return get_institution_from_id(inst_id, institutions)
                                 return None
-                            #print(len(institutions))
+
                             new_author = deepcopy(author)
                             if hasattr(author, 'institution_current'):
                                 inst_current = author.institution_current
@@ -489,7 +489,6 @@ class AuthorSearchQueryEngine(BaseAuthorSearchQueryEngine[List[AuthorData]]):
                     all_insts += return_insts
                 return inst_mapper
 
-            print(query)
             if (native_author_query is not None) and (native_author_query.metadata['author_search'] < SEARCH_MAX_ENTRIES/25):
                 results = await self.scopus_author_search.get_data_from_native_query(query, native_author_query) # actual_request
                 new_results = results
@@ -518,7 +517,6 @@ class AuthorSearchQueryEngine(BaseAuthorSearchQueryEngine[List[AuthorData]]):
                             'selector': query.selector.dict()
                         }
                         new_results += await self.scopus_author_search(AuthorSearchQuery.parse_obj(query_dict)) # actual_request
-
             return new_results
         return make_coroutine, metadata
 

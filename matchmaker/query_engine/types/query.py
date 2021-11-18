@@ -87,9 +87,10 @@ class AuthorName(BaseModel):
     tag: Literal['author'] = 'author'
     operator: StringPredicate
 
+AuthorIDAllActive = AuthorID.generate_model_from_selector()
 class AuthorIDHigh(BaseModel):
     tag: Literal['authorid'] = 'authorid'
-    operator: EqualPredicate[AuthorID]
+    operator: EqualPredicate[AuthorIDAllActive]
 
 class Journal(BaseModel):
     tag: Literal['journal'] = 'journal'
@@ -105,9 +106,10 @@ class Institution(BaseModel):
     tag: Literal['institution'] = 'institution'
     operator: StringPredicate
 
+InstitutionIDAllActive = InstitutionID.generate_model_from_selector()
 class InstitutionIDHigh(BaseModel):
     tag: Literal['institutionid'] = 'institutionid'
-    operator: EqualPredicate[InstitutionID]
+    operator: EqualPredicate[InstitutionIDAllActive]
 
 class Keyword(BaseModel):
     tag: Literal['keyword'] = 'keyword'
@@ -122,9 +124,10 @@ class Topic(BaseModel):
     tag: Literal['topic'] = 'topic'
     operator: StringPredicate
 
+PaperIDAllActive = PaperID.generate_model_from_selector()
 class PaperIDHigh(BaseModel):
     tag: Literal['id'] = 'id'
-    operator: EqualPredicate[PaperID]
+    operator: EqualPredicate[PaperIDAllActive]
 
 class Doi(BaseModel):
     tag: Literal['doi'] = 'doi'
