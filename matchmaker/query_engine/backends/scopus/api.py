@@ -148,6 +148,10 @@ class AffiliationID(BaseModel):
     tag: Literal['affiliationid'] = 'affiliationid'
     operator: StringPredicate
 
+class ScopusAuthorID(BaseModel):
+    tag: Literal['authorid'] = 'authorid'
+    operator: StringPredicate
+
 class Affiliation(BaseModel):
     tag: Literal['affiliation'] = 'affiliation'
     operator: StringPredicate
@@ -176,7 +180,7 @@ class ScopusSearchQuery(BaseModel):
         Pmid, 
         Doi, 
         Title, 
-        AuthorID,
+        ScopusAuthorID,
         Auth,
         SrcTitle,
         Publisher,
@@ -261,7 +265,7 @@ class ScopusAuthorSearchQuery(BaseModel):
         or_int, 
         AffiliationID,
         Affiliation,
-        AuthorID,
+        ScopusAuthorID,
         AuthorFirst,
         AuthorLast,
         Area,

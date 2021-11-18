@@ -223,7 +223,6 @@ class BaseSelector(Generic[Selector], BaseModel):
                 elif isinstance(dict1_v, dict) and isinstance(dict2_v, dict):
                     superset_selector_dict[dict1_k] = make_superset_selector_dict(dict1_v, dict2_v)
             return superset_selector_dict
-
         selector1_dict = selector1.dict()
         selector2_dict = selector2.dict()   
         superset_selector_dict = make_superset_selector_dict(selector1_dict, selector2_dict)
@@ -284,9 +283,17 @@ class PaperIDSelector(BaseSelector['PaperIDSelector']):
     pubmed_id: bool = False
     scopus_id: bool = False
 
+class AuthorIDSelector(BaseSelector['AuthorIDSelector']):
+    pubmed_id: bool = False
+    scopus_id: bool = False
+
+class InstitutionIDSelector(BaseSelector['InstitutionIDSelector']):
+    pubmed_id: bool = False
+    scopus_id: bool = False
+
 class InstitutionDataSelector(BaseSelector['InstitutionDataSelector']):
     name: bool = False
-    id: bool = False
+    id: Union[bool, InstitutionIDSelector] = False
     processed: bool = False
     paper_count: bool = False
     name_variants: bool = False
@@ -300,15 +307,15 @@ InstitutionDataAllSelected = InstitutionDataSelector(
 )
 
 class AuthorDataSelector(BaseSelector['AuthorDataSelector']):
-    class NameSelector(BaseModel):
+    class NameSelector(BaseSelector['NameSelector']):
         surname: bool = False
         given_names: bool = False
         initials: bool = False
-    class SubjectSelector(BaseModel):
+    class SubjectSelector(BaseSelector['SubjectSelector']):
         name: bool = False
         paper_count: bool = False
     preferred_name: Union[bool, NameSelector] = False
-    id: bool = False
+    id: Union[bool, AuthorIDSelector] = False
     name_variants: bool = False
     subjects: Union[bool, SubjectSelector] = False
     institution_current: Union[bool, InstitutionDataSelector] = False
@@ -329,7 +336,7 @@ AuthorDataAllSelected = AuthorDataSelector(
 
 
 
-class TopicSelector(BaseModel):
+class TopicSelector(BaseSelector['TopicSelector']):
     descriptor: bool = False
     qualifier: bool = False
 

@@ -2,7 +2,7 @@ from collections.abc import Container
 from numbers import Real
 from typing import Annotated, Generic, List, Literal, Type, TypeVar, Union
 
-from matchmaker.query_engine.types.data import PaperID
+from matchmaker.query_engine.types.data import PaperID, AuthorID, InstitutionID
 from matchmaker.query_engine.types.selector import (
     AuthorDataAllSelected,
     AuthorDataSelector,
@@ -87,9 +87,10 @@ class AuthorName(BaseModel):
     tag: Literal['author'] = 'author'
     operator: StringPredicate
 
-class AuthorID(BaseModel):
+AuthorIDAllActive = AuthorID.generate_model_from_selector()
+class AuthorIDHigh(BaseModel):
     tag: Literal['authorid'] = 'authorid'
-    operator: StringPredicate
+    operator: EqualPredicate[AuthorIDAllActive]
 
 class Journal(BaseModel):
     tag: Literal['journal'] = 'journal'
@@ -105,9 +106,10 @@ class Institution(BaseModel):
     tag: Literal['institution'] = 'institution'
     operator: StringPredicate
 
-class InstitutionID(BaseModel):
+InstitutionIDAllActive = InstitutionID.generate_model_from_selector()
+class InstitutionIDHigh(BaseModel):
     tag: Literal['institutionid'] = 'institutionid'
-    operator: StringPredicate
+    operator: EqualPredicate[InstitutionIDAllActive]
 
 class Keyword(BaseModel):
     tag: Literal['keyword'] = 'keyword'
@@ -122,9 +124,10 @@ class Topic(BaseModel):
     tag: Literal['topic'] = 'topic'
     operator: StringPredicate
 
+PaperIDAllActive = PaperID.generate_model_from_selector()
 class PaperIDHigh(BaseModel):
     tag: Literal['id'] = 'id'
-    operator: EqualPredicate[PaperID]
+    operator: EqualPredicate[PaperIDAllActive]
 
 class Doi(BaseModel):
     tag: Literal['doi'] = 'doi'
@@ -142,11 +145,11 @@ class PaperSearchQueryInner(BaseModel):
         Doi,
         Title,
         AuthorName,
-        AuthorID,
+        AuthorIDHigh,
         Journal,
         Abstract,
         Institution,
-        InstitutionID,
+        InstitutionIDHigh,
         Keyword,
         Year,
         Topic],
@@ -169,9 +172,9 @@ class AuthorSearchQueryInner(BaseModel):
         and_int,  
         or_int,  
         AuthorName,
-        AuthorID,
+        AuthorIDHigh,
         Institution,
-        InstitutionID,
+        InstitutionIDHigh,
         Year
         #Topic
     ],
@@ -196,7 +199,7 @@ class InstitutionSearchQueryInner(BaseModel):
         and_int,  
         or_int,
         Institution,
-        InstitutionID
+        InstitutionIDHigh
     ],
     Field(discriminator='tag')]
     

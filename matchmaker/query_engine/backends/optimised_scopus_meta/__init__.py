@@ -6,7 +6,7 @@ from matchmaker.query_engine.backends.scopus import InstitutionSearchQueryEngine
 
 from matchmaker.query_engine.types.data import AuthorData, PaperData, InstitutionData
 from matchmaker.query_engine.types.query import AuthorSearchQuery, PaperSearchQuery, InstitutionSearchQuery
-from matchmaker.query_engine.types.selector import AuthorDataAllSelected, PaperDataSelector, PaperDataAllSelected, AuthorDataSelector
+from matchmaker.query_engine.types.selector import AuthorDataAllSelected, InstitutionDataSelector, PaperDataSelector, PaperDataAllSelected, AuthorDataSelector
 from matchmaker.query_engine.slightly_less_abstract import AbstractNativeQuery
 from matchmaker.query_engine.slightly_less_abstract import SlightlyLessAbstractQueryEngine
 from matchmaker.query_engine.backend import Backend
@@ -203,7 +203,10 @@ class AuthorSearchQueryEngine(BaseAuthorSearchQueryEngine[List[AuthorData]]):
         self.scopus_author_search = scopus_author_search
         self.scopus_institution_search = scopus_institution_search
         self.available_fields = AuthorDataSelector.parse_obj({
-            'id':True,
+            'id':{
+                'scopus_id': True,
+                'pubmed_id': True
+            },
             'preferred_name':{
                 'surname': True,
                 'initials': True,
@@ -215,20 +218,29 @@ class AuthorSearchQueryEngine(BaseAuthorSearchQueryEngine[List[AuthorData]]):
             },
             'institution_current': {
                 'name': True,
-                'id': True,
+                'id':{
+                    'scopus_id': True,
+                    'pubmed_id': True
+                },
                 'processed': True
             },
             'paper_count': True,
             'paper_ids': True
         })
         self.paper_and_institution_fields = AuthorDataSelector.parse_obj({
-                'id': True,
+                'id':{
+                    'scopus_id': True,
+                    'pubmed_id': True
+                },
                 'preferred_name': {
                     'surname': True,
                     'given_names': True
                 },
                 'other_institutions': {
-                    'id': True,
+                    'id':{
+                        'scopus_id': True,
+                        'pubmed_id': True
+                    },
                     'name': True,
                     'processed': True
                 },
@@ -239,7 +251,10 @@ class AuthorSearchQueryEngine(BaseAuthorSearchQueryEngine[List[AuthorData]]):
             self.scopus_author_search.available_fields,
             self.paper_and_institution_fields,
             AuthorDataSelector.parse_obj({
-                'id': True,
+                'id':{
+                    'scopus_id': True,
+                    'pubmed_id': True
+                },
                 'preferred_name': {
                     'surname': True,
                     'initials': True,
@@ -250,7 +265,10 @@ class AuthorSearchQueryEngine(BaseAuthorSearchQueryEngine[List[AuthorData]]):
                     'paper_count': True
                 },
                 'other_institutions': {
-                    'id': True,
+                    'id':{
+                        'scopus_id': True,
+                        'pubmed_id': True
+                    },
                     'name': True,
                     'processed': True
                 },
@@ -264,6 +282,10 @@ class AuthorSearchQueryEngine(BaseAuthorSearchQueryEngine[List[AuthorData]]):
         """
         if one of the standard fields is asked for, 
         """
+        if query.selector not in self.available_fields:
+            overselected_fields = self.available_fields.get_values_overselected(query.selector)
+            raise QueryNotSupportedError(overselected_fields)
+        
         def author_query_to_paper_query(query: AuthorSearchQuery, available_fields: PaperDataSelector, required_fields: PaperDataSelector) -> PaperSearchQuery:
             query_dict = query.query.dict()
             selector_dict= query.selector.dict()
@@ -295,9 +317,13 @@ class AuthorSearchQueryEngine(BaseAuthorSearchQueryEngine[List[AuthorData]]):
                         'surname': True,
                         'given_names': True
                     },
-                    'id': True,
+                    'id':{
+                        'scopus_id': True
+                    },
                     'other_institutions': {
-                        'id': True,
+                        'id':{
+                            'scopus_id': True
+                        },
                     }
                 }
             })
@@ -324,15 +350,15 @@ class AuthorSearchQueryEngine(BaseAuthorSearchQueryEngine[List[AuthorData]]):
                             def get_more_institution_details(institution: Optional[InstitutionData], institutions: List[InstitutionData]):
                                 def get_institution_from_id(id: str, institutions: List[InstitutionData]) -> Optional[InstitutionData]:
                                     for institution in institutions:
-                                        if institution.id == id:
+                                        if institution.id is not None and institution.id.scopus_id == id:
                                             return institution
                                     return None
                                 if institution is not None:
-                                    inst_id = institution.id
+                                    inst_id = institution.id.scopus_id
                                     if inst_id is not None:
                                         return get_institution_from_id(inst_id, institutions)
                                 return None
-                            #print(len(institutions))
+
                             new_author = deepcopy(author)
                             if hasattr(author, 'institution_current'):
                                 inst_current = author.institution_current
@@ -358,7 +384,7 @@ class AuthorSearchQueryEngine(BaseAuthorSearchQueryEngine[List[AuthorData]]):
                                     def get_institution_ids_from_mapper(inst_mapper, query) -> List[str]:
                                         for i in inst_mapper:
                                             if i[0] == query:
-                                                return [j.id for j in i[1]]
+                                                return [institution.id.scopus_id for institution in i[1] if institution.id is not None]
                                         return []
                                     def make_string_term(body_string: Optional[str], q_value: str, operator: str) -> bool:
                                         if body_string is None:
@@ -408,9 +434,9 @@ class AuthorSearchQueryEngine(BaseAuthorSearchQueryEngine[List[AuthorData]]):
                             if hasattr(author, 'institution_current'):
                                 if author.institution_current is not None:
                                     institutions.append(author.institution_current)
-                            institution_ids = [inst.id for inst in institutions if inst.id is not None]
+                            institution_ids = [inst.id.scopus_id for inst in institutions if inst.id.scopus_id is not None]
 
-                            return author_matches_query_inner(institution_ids,author.preferred_name.surname, author.id)(query.dict()['query'])
+                            return author_matches_query_inner(institution_ids,author.preferred_name.surname, author.id.scopus_id)(query.dict()['query'])
 
                         new_author = add_institutions_to_author(author, query_institutions)
                         full_query = AuthorSearchQuery.parse_obj({
@@ -432,28 +458,36 @@ class AuthorSearchQueryEngine(BaseAuthorSearchQueryEngine[List[AuthorData]]):
                 unique_authors = {}
                 for paper in papers:
                     for author in paper.authors:
-                        if author.id not in unique_authors:
+                        if author.id.scopus_id not in unique_authors:
                             new_author = author_in_query(author)
                             if new_author:
-                                unique_authors[new_author.id] = new_author
+                                unique_authors[new_author.id.scopus_id] = new_author
                 return list(unique_authors.values())
 
 
             async def get_institutions_from_query(query: AuthorSearchQuery) -> List[Tuple[Any, List[InstitutionData]]]:
+
                 institutions =[]
                 def store_institution_callback(dict_structure):
                     institutions.append(dict_structure)
                 execute_callback_on_tag(query.dict()['query'], 'institution', store_institution_callback)
                 execute_callback_on_tag(query.dict()['query'], 'institutionid', store_institution_callback)
-
+                
                 inst_mapper = []
                 all_insts = []
                 for institution in institutions:
-                    return_insts = await self.scopus_institution_search(InstitutionSearchQuery.parse_obj({'query': institution})) # actual_request
+                    return_insts = await self.scopus_institution_search(InstitutionSearchQuery.parse_obj({
+                        'query': institution,
+                        'selector': {
+                            'name': True,
+                            'id': {
+                                'scopus_id': True
+                            }
+                        }
+                    })) # actual_request
                     inst_mapper.append((institution, return_insts))
                     all_insts += return_insts
                 return inst_mapper
-
 
             if (native_author_query is not None) and (native_author_query.metadata['author_search'] < SEARCH_MAX_ENTRIES/25):
                 results = await self.scopus_author_search.get_data_from_native_query(query, native_author_query) # actual_request
@@ -463,7 +497,7 @@ class AuthorSearchQueryEngine(BaseAuthorSearchQueryEngine[List[AuthorData]]):
                 inst_mapper = await get_institutions_from_query(query) # built in actual_request
                 new_results = get_unique_authors(query, results, inst_mapper)
                 if query.selector not in self.paper_and_institution_fields:
-                    author_ids = [author.id for author in new_results if author.id is not None]
+                    author_ids = [author.id.scopus_id for author in new_results if author.id is not None]
                     binned_author_ids = bin_items(author_ids, 25)
                     new_results = []
                     for id_set in binned_author_ids:
@@ -474,14 +508,15 @@ class AuthorSearchQueryEngine(BaseAuthorSearchQueryEngine[List[AuthorData]]):
                                     'tag': 'authorid',
                                     'operator': {
                                         'tag': 'equal',
-                                        'value': auth_id
+                                        'value': {
+                                            'scopus_id': auth_id
+                                        }
                                     }
                                 } for auth_id in id_set]
                             },
                             'selector': query.selector.dict()
                         }
                         new_results += await self.scopus_author_search(AuthorSearchQuery.parse_obj(query_dict)) # actual_request
-
             return new_results
         return make_coroutine, metadata
 
