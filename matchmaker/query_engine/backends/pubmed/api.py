@@ -188,6 +188,9 @@ async def esearch_on_query(
     raw_out = await output.text()
     proc_out = xml_parse.fromstring(raw_out)
     id_list = []
+    count = None
+    ret_max = None
+    ret_start = None
     for result in proc_out:
         if result.tag == 'IdList':
             id_list = id_list + [i.text for i in result.iterfind('Id')]
@@ -197,7 +200,12 @@ async def esearch_on_query(
             ret_max = result.text
         elif result.tag == 'RetStart':
             ret_start = result.text
-
+    if count is None:
+        raise ValueError('Count not found')
+    if ret_max is None:
+        raise ValueError('ret_max not found')
+    if ret_start is None:
+        raise ValueError('ret_start not found')
     # Get metadata
 
 
@@ -352,7 +360,8 @@ async def efetch_on_id_list(
         if article_id_list is None:
             raise ValueError('ArticleIdList not found')
         
-        articles = article_id_list.findall('ArticleId')
+        
+        #articles = article_id_list.findall('ArticleId')
         ids_available= {i.attrib['IdType']: i.text for i in article_id_list}
 
         #pubmed_id = medline_citation.find('PMID').text
@@ -483,7 +492,7 @@ async def efetch_on_id_list(
         else:
             elocation_dict = {}
 
-        new_ids = {}
+
         for id_name,id_value in elocation_dict.items():
             if id_name not in ids_available:
                 ids_available[id_name] = id_value
@@ -521,7 +530,6 @@ async def efetch_on_id_list(
             author_list = author_list_proc,
             journal_title = journal_title,
             journal_title_abr = journal_title_abr,
-            institution = institution,
             keywords = keyword_text,
             topics = topics,
             abstract = new_abstract
