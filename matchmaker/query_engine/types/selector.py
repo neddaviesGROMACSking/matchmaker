@@ -223,7 +223,6 @@ class BaseSelector(Generic[Selector], BaseModel):
                 elif isinstance(dict1_v, dict) and isinstance(dict2_v, dict):
                     superset_selector_dict[dict1_k] = make_superset_selector_dict(dict1_v, dict2_v)
             return superset_selector_dict
-
         selector1_dict = selector1.dict()
         selector2_dict = selector2.dict()   
         superset_selector_dict = make_superset_selector_dict(selector1_dict, selector2_dict)
