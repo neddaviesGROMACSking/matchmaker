@@ -49,8 +49,6 @@ class BaseBackendQueryEngine(
     async def __call__(self, query: Query) -> Data:
         nd = await self._run_native_query(await self._query_to_native(query))
         return await self._post_process(query, nd)
-    
-    #Put post process as no op
 
 
 class BasePaperSearchQueryEngine(

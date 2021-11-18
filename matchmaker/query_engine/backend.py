@@ -6,11 +6,11 @@ from matchmaker.query_engine.types.data import PaperData, AuthorData, Institutio
 from matchmaker.query_engine.abstract import AbstractQueryEngine
 
 class Backend:
-    def PaperSearchEngine(self) -> AbstractQueryEngine[PaperSearchQuery, List[PaperData]]:
+    def paper_search_engine(self) -> AbstractQueryEngine[PaperSearchQuery, List[PaperData]]:
         raise NotImplementedError('Calling method on abstract base class')
 
-    def AuthorSearchEngine(self) -> AbstractQueryEngine[AuthorSearchQuery, List[AuthorData]]:
+    def author_search_engine(self) -> AbstractQueryEngine[AuthorSearchQuery, List[AuthorData]]:
         raise NotImplementedError('Calling method on abstract base class')
 
-    def InstitutionSearchEngine(self) -> AbstractQueryEngine[InstitutionSearchQuery, List[InstitutionData]]:
+    def institution_search_engine(self) -> AbstractQueryEngine[InstitutionSearchQuery, List[InstitutionData]]:
         raise NotImplementedError('Calling method on abstract base class')
