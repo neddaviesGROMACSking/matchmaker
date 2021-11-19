@@ -47,6 +47,7 @@ class NotEnoughRequests(Exception):
 
 def convert_author_id(dict_structure):
     operator = dict_structure['operator']
+    assert dict_structure['tag'] == 'authorid'
     operator_value = operator['value']
     scopus_id = operator_value['scopus_id']
     return {
@@ -59,6 +60,7 @@ def convert_author_id(dict_structure):
 
 def convert_institution_id(dict_structure):
     operator = dict_structure['operator']
+    assert dict_structure['tag'] == 'institutionid'
     operator_value = operator['value']
     scopus_id = operator_value['scopus_id']
     return {
@@ -68,6 +70,44 @@ def convert_institution_id(dict_structure):
             'value': scopus_id
         }
     }
+
+def convert_paper_id(dict_structure):
+    operator = dict_structure['operator']
+    assert dict_structure['tag'] == 'id'
+    operator_value = operator['value']
+    id_searches = []
+    for id_type, value in operator_value.items():
+        if 'doi' == id_type and value is not None:
+            id_searches.append({
+                'tag': 'doi',
+                'operator': {
+                    'tag': operator['tag'],
+                    'value': value
+                }
+            })
+        elif 'pubmed_id' == id_type and value is not None:
+            id_searches.append({
+                'tag': 'pmid',
+                'operator': {
+                    'tag': operator['tag'],
+                    'value': value
+                }
+            })
+        elif 'scopus_id' == id_type and value is not None:
+            raise ValueError('Scopus id queries not supported')
+        elif value is None:
+            pass
+        else:
+            raise ValueError(f'Unknown id type: {id_type}')
+    if len(id_searches) == 0:
+        raise ValueError('No ids selected')
+    elif len(id_searches) ==1:
+        return id_searches[0]
+    else:
+        return {
+            'tag': 'or',
+            'fields_': id_searches
+        }
 
 def paper_query_to_scopus(query: PaperSearchQuery) -> ScopusSearchQuery:
     query_dict = query.dict()['query']
@@ -81,6 +121,7 @@ def paper_query_to_scopus(query: PaperSearchQuery) -> ScopusSearchQuery:
     )
     new_query_dict = execute_callback_on_tag(new_query_dict, 'authorid', convert_author_id)
     new_query_dict = execute_callback_on_tag(new_query_dict, 'institutionid', convert_institution_id)
+    new_query_dict = execute_callback_on_tag(new_query_dict, 'id', convert_paper_id)
     model_tags = get_available_model_tags(ScopusSearchQuery)
     check_model_tags(model_tags, new_query_dict)
     return ScopusSearchQuery.parse_obj(new_query_dict)

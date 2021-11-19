@@ -57,6 +57,7 @@ from matchmaker.query_engine.types.selector import (
 )
 from pydantic import BaseModel, Field
 from pydantic.error_wrappers import ValidationError
+from matchmaker.query_engine.backends.tools import execute_callback_on_tag
 # TODO Use generators to pass information threough all levels
 
 and_int = And['PubMedAuthorSearchQuery']
@@ -98,17 +99,55 @@ def make_doi_search_term(doi_list):
     return ' OR '.join(new_doi_list)
 
 
+def convert_paper_id(dict_structure):
+    operator = dict_structure['operator']
+    assert dict_structure['tag'] == 'id'
+    operator_value = operator['value']
+    id_searches = []
+    for id_type, value in operator_value.items():
+        if 'doi' == id_type and value is not None:
+            id_searches.append({
+                'tag': 'elocationid',
+                'operator': {
+                    'tag': operator['tag'],
+                    'value': value
+                }
+            })
+        elif 'pubmed_id' == id_type and value is not None:
+            id_searches.append({
+                'tag': 'pmid',
+                'operator': {
+                    'tag': operator['tag'],
+                    'value': value
+                }
+            })
+        elif 'scopus_id' == id_type and value is not None:
+            raise ValueError('Scopus id queries not supported')
+        elif value is None:
+            pass
+        else:
+            raise ValueError(f'Unknown id type: {id_type}')
+    if len(id_searches) == 0:
+        raise ValueError('No ids selected')
+    elif len(id_searches) ==1:
+        return id_searches[0]
+    else:
+        return {
+            'tag': 'or',
+            'fields_': id_searches
+        }
 
 def paper_query_to_esearch(query: PaperSearchQuery):
     # TODO convert topic to elocation
     # convert id.pubmed to pmid
     # convert id.doi to elocation
+    
     #new_query_dict = replace_ids(query.dict()['__root__'])
     new_query_dict = query.dict()['query']
     new_query_dict = replace_dict_tags(
-        new_query_dict,
-        elocationid = 'doi'
+        new_query_dict
     )
+    new_query_dict = execute_callback_on_tag(new_query_dict, 'id', convert_paper_id)
     return PubmedESearchQuery.parse_obj(new_query_dict)
 
 def author_query_to_esearch(query: AuthorSearchQuery):

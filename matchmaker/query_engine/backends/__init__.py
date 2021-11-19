@@ -16,7 +16,7 @@ from matchmaker.query_engine.types.query import (
     InstitutionSearchQuery,
     PaperSearchQuery,
 )
-
+import warnings
 class RateLimiter:
     bunch_start: Optional[float]
     max_requests_per_second: int
@@ -43,25 +43,27 @@ class RateLimiter:
             else:
                 self.bunch_start = current_time
                 self.requests_made = 1
-        
 
-class NewAsyncClient(ClientSession):
-    rate_limiter: RateLimiter
 
-    def __init__(self, rate_limiter: RateLimiter = RateLimiter(), *args, **kwargs):
-        self.rate_limiter = rate_limiter
-        super().__init__(*args, **kwargs)
-    async def get(self, *args, **kwargs):
-        await self.rate_limiter.rate_limit()
-        output = await super().get(*args, **kwargs)
-        print(int(dict(output.raw_headers)[b'X-RateLimit-Remaining']))
-        return output
+with warnings.catch_warnings():
+    warnings.filterwarnings("ignore",category=DeprecationWarning)
+    class NewAsyncClient(ClientSession):
+        rate_limiter: RateLimiter
 
-    async def post(self, *args, **kwargs):
-        await self.rate_limiter.rate_limit()
-        output = await super().post(*args, **kwargs)
-        print(int(dict(output.raw_headers)[b'X-RateLimit-Remaining']))
-        return output
+        def __init__(self, rate_limiter: RateLimiter = RateLimiter(), *args, **kwargs):
+            self.rate_limiter = rate_limiter
+            super().__init__(*args, **kwargs)
+        async def get(self, *args, **kwargs):
+            await self.rate_limiter.rate_limit()
+            output = await super().get(*args, **kwargs)
+            print(int(dict(output.raw_headers)[b'X-RateLimit-Remaining']))
+            return output
+
+        async def post(self, *args, **kwargs):
+            await self.rate_limiter.rate_limit()
+            output = await super().post(*args, **kwargs)
+            print(int(dict(output.raw_headers)[b'X-RateLimit-Remaining']))
+            return output
     
 NativeData = TypeVar('NativeData')
 
