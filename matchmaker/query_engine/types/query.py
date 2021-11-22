@@ -129,10 +129,6 @@ class PaperIDHigh(BaseModel):
     tag: Literal['id'] = 'id'
     operator: EqualPredicate[PaperIDAllActive]
 
-class Doi(BaseModel):
-    tag: Literal['doi'] = 'doi'
-    operator: StringPredicate
-
 and_int = And['PaperSearchQueryInner']
 or_int = Or['PaperSearchQueryInner']
 
@@ -142,7 +138,6 @@ class PaperSearchQueryInner(BaseModel):
         and_int,
         or_int,
         PaperIDHigh,
-        Doi,
         Title,
         AuthorName,
         AuthorIDHigh,
