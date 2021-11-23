@@ -5,7 +5,7 @@ description = ""
 authors = ["Edd Salkield <edd@salkield.uk>"]
 
 [tool.poetry.dependencies]
-python = "^3.9"
+python = ">=3.9, <3.11"
 pydantic = {git = "https://github.com/PrettyWood/pydantic.git", rev = "f/discriminated-union"}
 typer = "^0.4.0"
 mutate-function = "^0.1.0"
@@ -18,6 +18,8 @@ typing-extensions = "^3.10.0"
 type-reconstructor = "^0.1.0"
 gensim = "^4.1.2"
 tabulate = "^0.8.9"
+scipy = "^1.7.2"
+matplotlib = "^3.5.0"
 
 [tool.poetry.dev-dependencies]
 pytest = "^6.0.0"

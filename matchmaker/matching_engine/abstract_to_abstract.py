@@ -87,10 +87,70 @@ def calculate_directional_set_similarity(
         excluded_words,
         remove_singleton_words=True
     )
+    """
+    def get_match_rating(similarity_matrix):
+        def get_values_array(similarity_matrix):
+            output_list = []
+            for i in similarity_matrix:
+                for j in i:
+                    if j > 0:
+                        output_list.append(j)
+            dtype = [('Match', float)]
+            values_array = np.sort(np.array(output_list, dtype = dtype),order='Match')
+            return values_array
+        values_array = get_values_array(similarity_matrix)
+        from scipy.optimize import curve_fit
+        ydata = values_array
+        xdata = np.array(list(range(len(values_array))))
+
+        
+        def objective(x, a, b, c):
+            return b - a/(x+c)
+
+        popt, pcov = curve_fit(
+            objective, 
+            xdata, 
+            ydata, 
+            bounds = ([0.00001, 0.00001, 0.00001], [np.inf, np.inf,np.inf]), 
+            p0=np.asarray([100,1,100]) 
+        )
+        perr = np.sqrt(np.diag(pcov))
+        print('a: ', popt[0], '+-', perr[0])
+        print('b: ', popt[1], '+-', perr[1])
+        print('c: ', popt[2], '+-', perr[2])
+        
+        import matplotlib.pyplot as plt
+        plt.plot(xdata, ydata, 'b-', label='data')
+
+        new_ydata = objective(xdata, *popt)
+        plt.plot(xdata, new_ydata, 'r-',
+                label='fit: a=%5.3f, b=%5.3f, c=%5.3f' % tuple(popt))
+        plt.xlabel('x')
+        plt.ylabel('y')
+        plt.legend()
+        plt.savefig("mygraph.png")
+        plt.close()
+        match = objective(popt[0], 500, 1,0)
+        print('Match: ',match)
+
+    """
     #q75, q25 = np.percentile(similarity_matrix, [75 ,25])
     #within_interquartile = np.logical_and(similarity_matrix> q25, similarity_matrix< q75)
     #return np.average(similarity_matrix[within_interquartile])
     #return np.average(np.power(similarity_matrix,2))
+    """
+    new_test = np.zeros(similarity_matrix.shape, dtype = 'float32')
+    for i, el in enumerate(similarity_matrix):
+        new_test[i] = el
+    test = new_test.flatten()
+    
+
+    with open('dist.txt', 'w+') as f:
+        for i in list(similarity_matrix):
+            for j in i:
+                f.write(str(j) + "\n")
+    """
+    #get_match_rating(similarity_matrix)
     return np.average(similarity_matrix)
 
 def calculate_set_similarity(
