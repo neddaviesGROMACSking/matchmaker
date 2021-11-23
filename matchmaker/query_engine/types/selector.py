@@ -167,6 +167,7 @@ class BaseSelector(Generic[Selector], BaseModel):
         return overselects
     @classmethod
     def generate_subset_selector(cls, selector: Selector, fields_available: Selector):
+        # TODO Change this method name to "intersection" in accordance with set
         def make_subset_selector_dict(selector_dict: SelectorDict, available_dict: SelectorDict):
             subset_selector_dict = {}
             for selector_k, selector_v in selector_dict.items():
@@ -199,6 +200,7 @@ class BaseSelector(Generic[Selector], BaseModel):
 
     @classmethod
     def generate_superset_selector(cls, selector1: Selector, selector2: Selector):
+        # TODO Change this method name to "union" in accordance with set
         def make_superset_selector_dict(dict1: SelectorDict, dict2: SelectorDict):
             superset_selector_dict = {}
             for dict1_k, dict1_v in dict1.items():
@@ -228,6 +230,12 @@ class BaseSelector(Generic[Selector], BaseModel):
         superset_selector_dict = make_superset_selector_dict(selector1_dict, selector2_dict)
         return cls.parse_obj(superset_selector_dict)  
 
+    def __or__(self, other: Selector):
+        return self.generate_superset_selector(self, other)
+
+    def __and__(self, other: Selector):
+        return self.generate_subset_selector(self, other)
+    
     def generate_model(self, base_model: BaseModel, full_model: BaseModel, model_mapper: Dict[str, BaseModel] = {}) -> BaseModel:
         def make_model(model_name, selector_dict, base, fields):
             def check_whole_dict_is_value(s_dict: SelectorDict, value: bool):
