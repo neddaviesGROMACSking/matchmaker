@@ -424,6 +424,14 @@ class AuthorSearchQueryEngine(BaseAuthorSearchQueryEngine[List[AuthorData]]):
                                         return any([auth_inst_id in query_institution_ids for auth_inst_id in institution_ids])
                                     elif query['tag'] == 'year':
                                         return True
+                                    elif query['tag'] == 'keyword':
+                                        return True
+                                    elif query['tag'] == 'abstract':
+                                        return True
+                                    elif query['tag'] == 'title':
+                                        return True
+                                    elif query['tag'] == 'topic':
+                                        return True
                                     else:
                                         tag = query['tag']
                                         raise ValueError(f'Unknown tag: {tag}')

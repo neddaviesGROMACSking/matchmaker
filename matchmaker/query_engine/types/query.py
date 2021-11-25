@@ -170,8 +170,11 @@ class AuthorSearchQueryInner(BaseModel):
         AuthorIDHigh,
         Institution,
         InstitutionIDHigh,
-        Year
-        #Topic
+        Year,
+        Title,
+        Abstract,
+        Keyword,
+        Topic,
     ],
     Field(discriminator='tag')]
 
