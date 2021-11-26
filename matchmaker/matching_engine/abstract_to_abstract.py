@@ -80,6 +80,12 @@ def calculate_directional_set_similarity(
     abstract_set1: List[str], 
     abstract_set2: List[str]
 ) -> float:
+    def get_doc_count_bias(abstract_set1, power = 1):
+        count = len(abstract_set1)
+        return 1-count**-power
+    set1_bias = get_doc_count_bias(abstract_set1)
+    set2_bias = get_doc_count_bias(abstract_set2)
+    overall_bias = set1_bias * set2_bias
     excluded_words = set(total)
     similarity_matrix = produce_similarities(
         abstract_set1,
@@ -151,7 +157,7 @@ def calculate_directional_set_similarity(
                 f.write(str(j) + "\n")
     """
     #get_match_rating(similarity_matrix)
-    return np.average(similarity_matrix)
+    return np.average(similarity_matrix) #* overall_bias
 
 def calculate_set_similarity(
     abstract_set1: List[str], 

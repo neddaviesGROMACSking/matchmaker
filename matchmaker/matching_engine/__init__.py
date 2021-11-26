@@ -15,6 +15,7 @@ from numpy.typing import ArrayLike
 from matchmaker.matching_engine.abstract_to_abstract import calculate_set_similarity
 from tabulate import tabulate #type:ignore
 from functools import reduce
+import csv
 AuthorMatrix = ArrayLike
 
 
@@ -201,9 +202,26 @@ def display_matches(
 ):
     final_results = []
     for author1, author2, correlation in matches:
-        name1 = author1.preferred_name.given_names + ' ' + author1.preferred_name.surname
-        name2 = author2.preferred_name.given_names + ' ' + author2.preferred_name.surname
+        name1 = author1.preferred_name.given_names + ' ' + author1.preferred_name.surname + f' ({author1.paper_count})'
+        name2 = author2.preferred_name.given_names + ' ' + author2.preferred_name.surname + f' ({author2.paper_count})'
         final_results.append((name1,name2,correlation))
     dtype = [('Author1', '<U32'), ('Author2', '<U32'), ('Match', float)]
     final = np.sort(np.array(final_results, dtype = dtype),order='Match')
     print(tabulate(final, headers=['Author1', 'Author2', 'Match Rating']))
+
+def save_matches(
+    matches: List[Tuple[AuthorData,AuthorData,float]],
+    filename: str
+):
+    final_results = []
+    for author1, author2, correlation in matches:
+        name1 = author1.preferred_name.given_names + ' ' + author1.preferred_name.surname + f' ({author1.paper_count})'
+        name2 = author2.preferred_name.given_names + ' ' + author2.preferred_name.surname + f' ({author2.paper_count})'
+        final_results.append((name1,author1.paper_count, name2, author2.paper_count, correlation))
+    dtype = [('Author1', '<U32'),('Author1PC', '<U32'), ('Author2', '<U32'), ('Author2PC', '<U32'), ('Match', float)]
+    final = np.sort(np.array(final_results, dtype = dtype),order='Match')
+    with open(filename, 'w+', newline='') as csvfile:
+        filewriter = csv.writer(csvfile, delimiter=',', quotechar='"', quoting=csv.QUOTE_MINIMAL)
+        for i in final:
+            filewriter.writerow(i)
+       

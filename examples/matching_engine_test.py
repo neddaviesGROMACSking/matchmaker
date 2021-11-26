@@ -1,5 +1,5 @@
 import asyncio
-from typing import List
+from typing import List, Optional
 
 from tabulate import tabulate #type:ignore
 
@@ -8,6 +8,7 @@ from matchmaker.matching_engine import (
     MatchingEngine,
     display_matches,
     process_matches,
+    save_matches,
 )
 from matchmaker.query_engine.backends.optimised_scopus_meta import (
     OptimisedScopusBackend,
@@ -91,38 +92,78 @@ async def get_institution_data_from_name(name:str):
         })
     )
 
-def get_author_query_from_id(id_string:str):
-    return AuthorSearchQuery.parse_obj({
-        'query':{
-            'tag': 'and',
-            'fields_': [
-                {
-                    'tag': 'institutionid',
-                    'operator': {
-                        'tag': 'equal',
-                        'value': {
-                            'scopus_id': id_string
+def get_author_query_from_id(id_string:str, keyword: Optional[str] = None):
+    if keyword is not None:
+        return AuthorSearchQuery.parse_obj({
+            'query':{
+                'tag': 'and',
+                'fields_': [
+                    {
+                        'tag': 'institutionid',
+                        'operator': {
+                            'tag': 'equal',
+                            'value': {
+                                'scopus_id': id_string
+                            }
+                        }
+                    },
+                    {
+                        'tag': 'year',
+                        'operator': {
+                            'tag': 'range',
+                            'lower_bound': '2018',
+                            'upper_bound': '2022'
+                        }
+                    },
+                    {
+                        'tag': 'abstract',
+                        'operator': {
+                            'tag': 'equal',
+                            'value': keyword
                         }
                     }
-                },
-                {
-                    'tag': 'year',
-                    'operator': {
-                        'tag': 'range',
-                        'lower_bound': '2018',
-                        'upper_bound': '2022'
+                ]
+            },
+            'selector': {
+                'preferred_name': True,
+                'paper_count': True
+            }
+        })
+    else:
+        return AuthorSearchQuery.parse_obj({
+            'query':{
+                'tag': 'and',
+                'fields_': [
+                    {
+                        'tag': 'institutionid',
+                        'operator': {
+                            'tag': 'equal',
+                            'value': {
+                                'scopus_id': id_string
+                            }
+                        }
+                    },
+                    {
+                        'tag': 'year',
+                        'operator': {
+                            'tag': 'range',
+                            'lower_bound': '2018',
+                            'upper_bound': '2022'
+                        }
                     }
-                }
-            ]
-        },
-        'selector': {
-            'preferred_name': True
-        }
-    })
+                ]
+            },
+            'selector': {
+                'preferred_name': True,
+                'paper_count': True
+            }
+        })
 
-name1 = 'IBM Ireland Limited'
-name2 = 'Limerick Institute of Technology'
 
+name1 = 'Kings College'
+keyword1 = 'Craniofacial'
+name2 = 'University of California at San Francisco'
+keyword2 = 'Orofacial'
 
 
 matching_engine = MatchingEngine(
@@ -132,16 +173,20 @@ matching_engine = MatchingEngine(
     ]
 )
 
-
-
+def make_filename(name1, keyword1, name2, keyword2):
+    new_name1 = name1.replace(' ', '_').lower()
+    new_name2 = name2.replace(' ', '_').lower()
+    new_keyword1 = keyword1.replace(' ', '_').lower()
+    new_keyword2 = keyword2.replace(' ', '_').lower()
+    return '_'.join([new_name1, new_keyword1, 'vs', new_name2, new_keyword2])+'.csv'
 
 async def main():
     inst_data1 = await get_institution_data_from_name(name1)
     inst_data2 = await get_institution_data_from_name(name2)
     inst_id1 = choose_institution(inst_data1)
     inst_id2 = choose_institution(inst_data2)
-    author_query1 = get_author_query_from_id(inst_id1)
-    author_query2 = get_author_query_from_id(inst_id2)
+    author_query1 = get_author_query_from_id(inst_id1, keyword1)
+    author_query2 = get_author_query_from_id(inst_id2, keyword2)
 
     out = await matching_engine(author_query1, author_query2)
     stacked_m, author_data1, author_data2 = out
@@ -153,4 +198,6 @@ async def main():
 
 results = asyncio.run(main())
 display_matches(results)
+save_matches(results, make_filename(name1, keyword1, name2, keyword2))
+#save_matches(results, )
 #print(results)

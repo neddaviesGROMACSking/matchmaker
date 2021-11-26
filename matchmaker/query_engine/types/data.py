@@ -68,7 +68,12 @@ AuthorIDDef.__name__ = 'AuthorID'
 
 class AuthorID(BaseData[AuthorIDSelector]):
     def __eq__(self, other) -> bool:
-        raise NotImplementedError
+        if hasattr(self, 'scopus_id') and hasattr(other, 'scopus_id'):
+            return self.scopus_id == other.scopus_id
+        #elif hasattr(self, 'pubmed_id') and hasattr(other, 'pubmed_id'):
+        #    raise NotImplementedError
+        else:
+            return False
     @classmethod
     def generate_model_from_selector(cls, selector: Union[bool, AuthorIDSelector] = True):
         return super().generate_model_from_selector(
