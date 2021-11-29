@@ -2,9 +2,9 @@ from matchmaker.query_engine.backends.pubmed import PubmedBackend, PaperSearchQu
 from matchmaker.query_engine.backends.scopus import ScopusBackend, InstitutionSearchQueryEngine
 from matchmaker.query_engine.backends.scopus.api import Auth
 
-from matchmaker.query_engine.data_types import AuthorData, PaperData, InstitutionData
-from matchmaker.query_engine.query_types import AuthorSearchQuery, PaperSearchQuery, InstitutionSearchQuery
-from matchmaker.query_engine.selector_types import AuthorDataSelector, PaperDataSelector, PaperDataAllSelected
+from matchmaker.query_engine.types.data import AuthorData, PaperData, InstitutionData
+from matchmaker.query_engine.types.query import AuthorSearchQuery, PaperSearchQuery, InstitutionSearchQuery
+from matchmaker.query_engine.types.selector import AuthorDataSelector, PaperDataSelector, PaperDataAllSelected
 from matchmaker.query_engine.slightly_less_abstract import AbstractNativeQuery
 from matchmaker.query_engine.slightly_less_abstract import SlightlyLessAbstractQueryEngine
 from matchmaker.query_engine.backend import Backend

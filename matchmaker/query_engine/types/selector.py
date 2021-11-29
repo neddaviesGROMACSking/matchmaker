@@ -6,6 +6,14 @@ from pydantic import BaseModel, create_model
 from pydantic.fields import ModelField
 from copy import copy
 import pdb
+from typing import Callable, Union
+from typing import Any, Dict, Generic, List, Optional, Tuple, TypeVar, Union
+import typing
+from typing_extensions import get_origin, get_args
+from pydantic import BaseModel, create_model
+from pydantic.fields import ModelField
+from copy import copy
+import pdb
 from type_reconstructor import extract_element
 
 
@@ -159,6 +167,7 @@ class BaseSelector(Generic[Selector], BaseModel):
         return overselects
     @classmethod
     def generate_subset_selector(cls, selector: Selector, fields_available: Selector):
+        # TODO Change this method name to "intersection" in accordance with set
         def make_subset_selector_dict(selector_dict: SelectorDict, available_dict: SelectorDict):
             subset_selector_dict = {}
             for selector_k, selector_v in selector_dict.items():
@@ -191,6 +200,7 @@ class BaseSelector(Generic[Selector], BaseModel):
 
     @classmethod
     def generate_superset_selector(cls, selector1: Selector, selector2: Selector):
+        # TODO Change this method name to "union" in accordance with set
         def make_superset_selector_dict(dict1: SelectorDict, dict2: SelectorDict):
             superset_selector_dict = {}
             for dict1_k, dict1_v in dict1.items():
@@ -215,12 +225,17 @@ class BaseSelector(Generic[Selector], BaseModel):
                 elif isinstance(dict1_v, dict) and isinstance(dict2_v, dict):
                     superset_selector_dict[dict1_k] = make_superset_selector_dict(dict1_v, dict2_v)
             return superset_selector_dict
-
         selector1_dict = selector1.dict()
         selector2_dict = selector2.dict()   
         superset_selector_dict = make_superset_selector_dict(selector1_dict, selector2_dict)
         return cls.parse_obj(superset_selector_dict)  
 
+    def __or__(self, other: Selector):
+        return self.generate_superset_selector(self, other)
+
+    def __and__(self, other: Selector):
+        return self.generate_subset_selector(self, other)
+    
     def generate_model(self, base_model: BaseModel, full_model: BaseModel, model_mapper: Dict[str, BaseModel] = {}) -> BaseModel:
         def make_model(model_name, selector_dict, base, fields):
             def check_whole_dict_is_value(s_dict: SelectorDict, value: bool):
@@ -267,3 +282,115 @@ class BaseSelector(Generic[Selector], BaseModel):
         selector_dict = self.dict()
         model = make_model(base_model.__name__, selector_dict, base_model, fields)
         return model
+
+# TODO Make all selectors inherit from BaseSelector
+
+# Datatype invarient: Every field of this model uniquely identifies a paper
+class PaperIDSelector(BaseSelector['PaperIDSelector']):
+    doi: bool = False
+    pubmed_id: bool = False
+    scopus_id: bool = False
+
+class AuthorIDSelector(BaseSelector['AuthorIDSelector']):
+    pubmed_id: bool = False
+    scopus_id: bool = False
+
+class InstitutionIDSelector(BaseSelector['InstitutionIDSelector']):
+    pubmed_id: bool = False
+    scopus_id: bool = False
+
+class InstitutionDataSelector(BaseSelector['InstitutionDataSelector']):
+    name: bool = False
+    id: Union[bool, InstitutionIDSelector] = False
+    processed: bool = False
+    paper_count: bool = False
+    name_variants: bool = False
+
+InstitutionDataAllSelected = InstitutionDataSelector(
+    name = True,
+    id = True,
+    processed = True,
+    paper_count = True,
+    name_variants = True
+)
+
+class AuthorDataSelector(BaseSelector['AuthorDataSelector']):
+    class NameSelector(BaseSelector['NameSelector']):
+        surname: bool = False
+        given_names: bool = False
+        initials: bool = False
+    class SubjectSelector(BaseSelector['SubjectSelector']):
+        name: bool = False
+        paper_count: bool = False
+    preferred_name: Union[bool, NameSelector] = False
+    id: Union[bool, AuthorIDSelector] = False
+    name_variants: bool = False
+    subjects: Union[bool, SubjectSelector] = False
+    institution_current: Union[bool, InstitutionDataSelector] = False
+    other_institutions: Union[bool, InstitutionDataSelector] = False
+    paper_count: bool = False
+    paper_ids: Union[bool, PaperIDSelector] = False
+
+AuthorDataAllSelected = AuthorDataSelector(
+    preferred_name = True,
+    id = True,
+    name_variants = True,
+    subjects = True,
+    institution_current = True,
+    other_institutions = True,
+    paper_count = True,
+    paper_ids = True
+)
+
+
+
+class TopicSelector(BaseSelector['TopicSelector']):
+    descriptor: bool = False
+    qualifier: bool = False
+
+class SubPaperDataSelector(BaseSelector['SubPaperDataSelector']):
+    paper_id: Union[bool, PaperIDSelector] = False
+    title: bool = False
+    authors: Union[bool, AuthorDataSelector] = False
+    year: bool = False
+    source_title: bool = False
+    source_title_id: bool = False
+    source_title_abr: bool = False
+    abstract: bool = False
+    institutions: Union[bool, InstitutionDataSelector]  = False
+    keywords: bool = False
+    topics: Union[bool, TopicSelector] = False
+
+SubPaperDataAllSelected = SubPaperDataSelector(
+    paper_id = True,
+    title = True,
+    authors = True,
+    year = True,
+    source_title = True,
+    source_title_id = True,
+    source_title_abr = True,
+    abstract = True,
+    institutions = True,
+    keywords = True,
+    topics = True
+)
+
+class PaperDataSelector(SubPaperDataSelector, BaseSelector['PaperDataSelector']):
+    references: Union[bool, SubPaperDataSelector] = False
+    cited_by: Union[bool, SubPaperDataSelector] = False
+
+PaperDataAllSelected = PaperDataSelector(
+    paper_id = True,
+    title = True,
+    authors = True,
+    year = True,
+    source_title = True,
+    source_title_id = True,
+    source_title_abr = True,
+    abstract = True,
+    institutions = True,
+    keywords = True,
+    topics = True,
+    references = True,
+    cited_by = True
+)

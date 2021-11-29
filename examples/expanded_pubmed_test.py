@@ -2,7 +2,7 @@ from matchmaker.query_engine.backends import expanded_pubmed_meta
 from matchmaker.query_engine.backends.expanded_pubmed_meta import ExpandedPubmedMeta
 from matchmaker.query_engine.backends.pubmed import PubmedBackend
 from secret import pubmed_api_key
-from matchmaker.query_engine.query_types import AuthorSearchQuery
+from matchmaker.query_engine.types.query import AuthorSearchQuery
 import asyncio
 expanded_pub = ExpandedPubmedMeta(PubmedBackend(
     pubmed_api_key

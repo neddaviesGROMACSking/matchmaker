@@ -1,4 +1,4 @@
-from matchmaker.query_engine.query_types import PaperSearchQuery, AuthorSearchQuery
+from matchmaker.query_engine.types.query import PaperSearchQuery, AuthorSearchQuery
 from matchmaker.query_engine.backends.pubmed import PubmedBackend
 from secret import pubmed_api_key
 import asyncio

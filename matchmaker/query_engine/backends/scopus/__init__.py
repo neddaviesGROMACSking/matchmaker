@@ -26,26 +26,88 @@ from matchmaker.query_engine.backends.scopus.api import (
     get_scopus_query_remaining_in_cache,
     scopus_search_on_query,
 )
-from matchmaker.query_engine.backends.scopus.processors import (
-    ProcessedScopusSearchResult,
-)
+
 from matchmaker.query_engine.backends.tools import (
     execute_callback_on_tag,
     replace_dict_tags,
     get_available_model_tags,
     check_model_tags
 )
-from matchmaker.query_engine.data_types import AuthorData, InstitutionData, PaperData
-from matchmaker.query_engine.selector_types import AuthorDataSelector, InstitutionDataSelector, PaperDataSelector
-from matchmaker.query_engine.query_types import (
+from matchmaker.query_engine.types.data import AuthorData, InstitutionData, PaperData
+from matchmaker.query_engine.types.selector import AuthorDataSelector, InstitutionDataSelector, PaperDataSelector
+from matchmaker.query_engine.types.query import (
     AuthorSearchQuery,
     InstitutionSearchQuery,
     PaperSearchQuery,
 )
-import pdb
+
 from matchmaker.query_engine.backends.exceptions import QueryNotSupportedError
 class NotEnoughRequests(Exception):
     pass
+
+def convert_author_id(dict_structure):
+    operator = dict_structure['operator']
+    assert dict_structure['tag'] == 'authorid'
+    operator_value = operator['value']
+    scopus_id = operator_value['scopus_id']
+    return {
+        'tag': dict_structure['tag'],
+        'operator': {
+            'tag': operator['tag'],
+            'value': scopus_id
+        }
+    }
+
+def convert_institution_id(dict_structure):
+    operator = dict_structure['operator']
+    assert dict_structure['tag'] == 'institutionid'
+    operator_value = operator['value']
+    scopus_id = operator_value['scopus_id']
+    return {
+        'tag': 'affiliationid',
+        'operator': {
+            'tag': operator['tag'],
+            'value': scopus_id
+        }
+    }
+
+def convert_paper_id(dict_structure):
+    operator = dict_structure['operator']
+    assert dict_structure['tag'] == 'id'
+    operator_value = operator['value']
+    id_searches = []
+    for id_type, value in operator_value.items():
+        if 'doi' == id_type and value is not None:
+            id_searches.append({
+                'tag': 'doi',
+                'operator': {
+                    'tag': operator['tag'],
+                    'value': value
+                }
+            })
+        elif 'pubmed_id' == id_type and value is not None:
+            id_searches.append({
+                'tag': 'pmid',
+                'operator': {
+                    'tag': operator['tag'],
+                    'value': value
+                }
+            })
+        elif 'scopus_id' == id_type and value is not None:
+            raise ValueError('Scopus id queries not supported')
+        elif value is None:
+            pass
+        else:
+            raise ValueError(f'Unknown id type: {id_type}')
+    if len(id_searches) == 0:
+        raise ValueError('No ids selected')
+    elif len(id_searches) ==1:
+        return id_searches[0]
+    else:
+        return {
+            'tag': 'or',
+            'fields_': id_searches
+        }
 
 def paper_query_to_scopus(query: PaperSearchQuery) -> ScopusSearchQuery:
     query_dict = query.dict()['query']
@@ -55,8 +117,11 @@ def paper_query_to_scopus(query: PaperSearchQuery) -> ScopusSearchQuery:
         srctitle = 'journal',
         authorkeyword = 'keyword',
         keyword = 'topic',
-        affiliation = 'institution'
+        affiliation = 'institution',
     )
+    new_query_dict = execute_callback_on_tag(new_query_dict, 'authorid', convert_author_id)
+    new_query_dict = execute_callback_on_tag(new_query_dict, 'institutionid', convert_institution_id)
+    new_query_dict = execute_callback_on_tag(new_query_dict, 'id', convert_paper_id)
     model_tags = get_available_model_tags(ScopusSearchQuery)
     check_model_tags(model_tags, new_query_dict)
     return ScopusSearchQuery.parse_obj(new_query_dict)
@@ -96,18 +161,16 @@ def author_query_to_scopus_author(query: AuthorSearchQuery) -> ScopusAuthorSearc
             }
 
         return new_dict_structure
-    
+
     query_dict = query.dict()['query']
-
-
 
     new_query_dict = replace_dict_tags(
         query_dict,
-        affiliation = 'institution',
-        affiliationid = 'institutionid'
+        affiliation = 'institution'
     )
-
     new_query_dict = execute_callback_on_tag(new_query_dict, 'author', convert_author)
+    new_query_dict = execute_callback_on_tag(new_query_dict, 'authorid', convert_author_id)
+    new_query_dict = execute_callback_on_tag(new_query_dict, 'institutionid', convert_institution_id)
     model_tags = get_available_model_tags(ScopusAuthorSearchQuery)
     check_model_tags(model_tags, new_query_dict)
     return ScopusAuthorSearchQuery.parse_obj(new_query_dict)
@@ -116,9 +179,9 @@ def institution_query_to_affiliation(query: InstitutionSearchQuery) -> Affiliati
     query_dict = query.dict()['query']
     new_query_dict = replace_dict_tags(
         query_dict,
-        affiliation = 'institution',
-        affiliationid = 'institutionid'
+        affiliation = 'institution'
     )
+    new_query_dict = execute_callback_on_tag(new_query_dict, 'institutionid', convert_institution_id)
     model_tags = get_available_model_tags(AffiliationSearchQuery)
     check_model_tags(model_tags, new_query_dict)
     return AffiliationSearchQuery.parse_obj(new_query_dict) 
@@ -140,9 +203,13 @@ class PaperSearchQueryEngine(
                     'surname': True,
                     'given_names': True
                 },
-                'id': True,
+                'id': {
+                    'scopus_id': True
+                },
                 'other_institutions': {
-                    'id': True,
+                    'id': {
+                        'scopus_id': True
+                    }
                 }
             },
             'year': True,
@@ -152,7 +219,9 @@ class PaperSearchQueryEngine(
             'keywords': True,
             'institutions': {
                 'name': True,
-                'id': True,
+                'id': {
+                    'scopus_id': True
+                },
                 'processed': True
             }
         })
@@ -259,9 +328,13 @@ class PaperSearchQueryEngine(
                         'surname': True,
                         'given_names': True
                     },
-                    'id': True,
+                    'id': {
+                        'scopus_id': True
+                    },
                     'other_institutions': {
-                        'id': True,
+                        'id': {
+                            'scopus_id': True
+                        },
                     }
                 },
             })):
@@ -281,13 +354,17 @@ class PaperSearchQueryEngine(
                 })
                 auth_id_selected = PaperDataSelector.parse_obj({
                     'authors':{
-                        'id': True
+                        'id': {
+                            'scopus_id': True
+                        }
                     }
                 })
                 other_inst_id_selected = PaperDataSelector.parse_obj({
                     'authors':{
                         'other_institutions':{
-                            'id': True
+                            'id': {
+                                'scopus_id': True
+                            }
                         }
                     }
                 })
@@ -337,12 +414,12 @@ class PaperSearchQueryEngine(
                             new_author['preferred_name'] = new_author_name
                         if auth_id_selected in query.selector:
                             if author_ids is not None and (len(author_names) == len(author_ids)):
-                                new_author['id'] = author_ids[j]
+                                new_author['id'] = {'scopus_id': author_ids[j]}
                             else:
                                 new_author['id'] = None
                         if other_inst_id_selected in query.selector:
                             if author_afids is not None and len(author_names) == len(author_afids):
-                                new_author['other_institutions'] = [{'id': k} for k in author_afids[j]]
+                                new_author['other_institutions'] = [{'id': {'scopus_id':k}} for k in author_afids[j]]
                             else:
                                 new_author['other_institutions'] = []
                         new_authors.append(new_author)
@@ -353,7 +430,9 @@ class PaperSearchQueryEngine(
             if query.selector.any_of_fields(
                 PaperDataSelector.parse_obj({
                     'institutions':{
-                        'id': True,
+                        'id': {
+                            'scopus_id': True
+                        },
                         'name': True,
                         'processed': True
                     }
@@ -373,9 +452,9 @@ class PaperSearchQueryEngine(
                     new_institutions = []
                     for i, affil_name in enumerate(affil_names):
                         new_institution = {}
-                        if PaperDataSelector.parse_obj({'institutions': {'id': True}}) in query.selector:
+                        if PaperDataSelector.parse_obj({'institutions': {'id': {'scopus_id': True}}}) in query.selector:
                             if afids is not None and len(affil_names) == len(afids):
-                                new_institution['id'] = afids[i]
+                                new_institution['id'] = {'scopus_id': afids[i]}
                             else:
                                 new_institution['id'] = None
                         if PaperDataSelector.parse_obj({'institutions': {'processed': True}}) in query.selector:
@@ -406,7 +485,9 @@ class AuthorSearchQueryEngine(
         self.api_key = api_key
         self.institution_token = institution_token
         self.available_fields = AuthorDataSelector.parse_obj({
-            'id':True,
+            'id': {
+                'scopus_id': True
+            },
             'preferred_name':{
                 'surname': True,
                 'initials': True,
@@ -415,7 +496,9 @@ class AuthorSearchQueryEngine(
             'subjects': True,
             'institution_current': {
                 'name': True,
-                'id': True,
+                'id': {
+                    'scopus_id': True
+                },
                 'processed': True
             },
             'paper_count': True
@@ -454,8 +537,8 @@ class AuthorSearchQueryEngine(
         for author in data:
             author_dict = author.dict()
             new_author_dict = {}
-            if AuthorDataSelector(id = True) in query.selector:
-                new_author_dict['id'] = author_dict['eid'].split('-')[-1]
+            if AuthorDataSelector.parse_obj({'id': {'scopus_id': True}}) in query.selector:
+                new_author_dict['id'] = {'scopus_id': author_dict['eid'].split('-')[-1]}
             if query.selector.any_of_fields(AuthorDataSelector.parse_obj({
                 'preferred_name':{
                     'given_names': True,
@@ -492,15 +575,17 @@ class AuthorSearchQueryEngine(
             if query.selector.any_of_fields(AuthorDataSelector.parse_obj({
                 'institution_current': {
                     'name': True,
-                    'id': True,
+                    'id': {
+                        'scopus_id': True
+                    },
                     'processed': True
                 }
             })):
                 new_institution = {}
                 if AuthorDataSelector.parse_obj({'institution_current': {'name': True}}) in query.selector:
                     new_institution['name'] = author_dict['affiliation']
-                if AuthorDataSelector.parse_obj({'institution_current': {'id': True}}) in query.selector:
-                    new_institution['id'] = author_dict['affiliation_id']
+                if AuthorDataSelector.parse_obj({'institution_current': {'id': {'scopus_id': True}}}) in query.selector:
+                    new_institution['id'] = {'scopus_id': author_dict['affiliation_id']}
                 if AuthorDataSelector.parse_obj({'institution_current': {'processed': True}}) in query.selector:
                     processed = []
                     if author_dict['city'] is not None:
@@ -520,7 +605,9 @@ class InstitutionSearchQueryEngine(
         self.api_key = api_key
         self.institution_token = institution_token
         self.available_fields = InstitutionDataSelector.parse_obj({
-            'id': True,
+            'id': {
+                'scopus_id': True
+            },
             'name': True,
             'name_variants': True,
             'paper_count': True,
@@ -561,8 +648,8 @@ class InstitutionSearchQueryEngine(
         for paper in data:
             paper_dict = paper.dict()
             new_paper_dict = {}
-            if InstitutionDataSelector(id = True) in query.selector:
-                new_paper_dict['id'] = paper_dict['eid'].split('-')[-1]
+            if InstitutionDataSelector.parse_obj({'id':{'scopus_id': True}}) in query.selector:
+                new_paper_dict['id'] = {'scopus_id': paper_dict['eid'].split('-')[-1]}
             if InstitutionDataSelector(name = True) in query.selector:
                 new_paper_dict['name'] = paper_dict['name']
             if InstitutionDataSelector(name_variants = True) in query.selector:

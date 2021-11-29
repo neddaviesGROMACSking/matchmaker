@@ -1,8 +1,20 @@
-from matchmaker.query_engine.types.query import PaperSearchQuery, AuthorSearchQuery, InstitutionSearchQuery
+from matchmaker.query_engine.types.query import PaperSearchQuery, AuthorSearchQuery
+from matchmaker.query_engine.backends.optimised_scopus_meta import OptimisedScopusBackend
 from matchmaker.query_engine.backends.pubmed import PubmedBackend
 from matchmaker.query_engine.backends.scopus import ScopusBackend
 from secret import pubmed_api_key, scopus_api_key, scopus_inst_token
 import asyncio
+op_scopus_backend = OptimisedScopusBackend(
+    ScopusBackend(
+        scopus_api_key,
+        scopus_inst_token
+    ),
+    PubmedBackend(
+        pubmed_api_key
+    )
+)
+
+author_searcher = op_scopus_backend.author_search_engine()
 author_search = AuthorSearchQuery.parse_obj({
     'query':{
         'tag': 'and',
@@ -13,11 +25,21 @@ author_search = AuthorSearchQuery.parse_obj({
                     'tag': 'equal',
                     'value': 'Jeremy Green'
                 }
+            },
+            {
+                'tag': 'topic',
+                'operator': {
+                    'tag': 'equal',
+                    'value': 'Craniofacial'
+                }
             }
         ]
+    },
+    'selector': {
+        'id': {'scopus_id': True}
     }
 })
-
+"""
 paper_search = PaperSearchQuery.parse_obj({
     'query':{
         'tag': 'and',
@@ -38,11 +60,17 @@ paper_search = PaperSearchQuery.parse_obj({
                 }
             }
         ]
-    }
-})
+    },
 
+    #'selector': paper_searcher.complete_fields.dict()
+    'selector': PaperDataSelector.parse_obj({
+        'paper_id':{'doi': True},
+        'institutions':{'id': {'scopus_id': True}},
+        'authors': {'other_institutions': {'id': {'scopus_id': True}}}
+    })
+})
 inst_search = InstitutionSearchQuery.parse_obj({
-    'query': {
+    'query':{
         'tag': 'institution',
         'operator': {
             'tag': 'equal',
@@ -50,23 +78,15 @@ inst_search = InstitutionSearchQuery.parse_obj({
         }
     }
 })
+"""
 
-pubmed_backend = PubmedBackend(api_key=pubmed_api_key)
-scopus_backend = ScopusBackend(scopus_api_key, scopus_inst_token)
+
 async def main():
-    pub_paper_searcher = pubmed_backend.paper_search_engine()
-    pub_author_searcher = pubmed_backend.author_search_engine()
-    sco_paper_searcher = scopus_backend.paper_search_engine()
-    sco_author_searcher = scopus_backend.author_search_engine()
-    sco_inst_searcher = scopus_backend.institution_search_engine()
-
-    pub_paper_results = await pub_paper_searcher(paper_search)
-    pub_author_results = await pub_author_searcher(author_search)
-    sco_paper_results = await sco_paper_searcher(paper_search)
-    sco_author_results = await sco_author_searcher(author_search)
-    sco_inst_results = await sco_inst_searcher(inst_search)
-    print(sco_author_results[0])
-    print()
-    print(pub_author_results[0])
-    return pub_paper_results
-pub_paper_results = asyncio.run(main())
+    #paper_results = await paper_searcher(paper_search)
+    
+    author_results = await author_searcher(author_search)
+   
+    #inst_results = await inst_searcher(inst_search)
+    return author_results
+author_results = asyncio.run(main())
+print(author_results[0:4])

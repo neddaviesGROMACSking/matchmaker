@@ -2,6 +2,7 @@ import csv
 import time
 from pybliometrics.scopus.utils.constants import DEFAULT_PATHS
 from datetime import datetime
+
 # Quote cache invariant - the reset time is the same throughout the file
 def store_quota_in_cache(results):
     def store_quota_in_cache_inner(search_name: str, remaining: float, reset: float):
