@@ -72,7 +72,7 @@ inst_search = InstitutionSearchQuery.parse_obj({
 
 
 async def main():
-    data = await paper_searcher(paper_search)
+    data = await inst_searcher(inst_search)
     metadata = await data.metadata()
     paper_results = [i async for i in data]
     return paper_results, metadata

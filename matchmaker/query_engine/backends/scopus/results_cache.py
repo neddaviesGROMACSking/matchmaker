@@ -1,8 +1,10 @@
+from matchmaker import query_engine
 from pybliometrics.scopus.utils.constants import DEFAULT_PATHS
 import csv
 from typing import Optional
-
-
+import hashlib
+def hash_string(string:str) -> int:
+    return int(hashlib.sha1(string.encode("utf-8")).hexdigest(), 16) % (10 ** 8)
     
 def get_no_results(search_name: str, query_string: str) -> Optional[int]:
     if search_name not in DEFAULT_PATHS:
@@ -22,7 +24,9 @@ def get_no_results(search_name: str, query_string: str) -> Optional[int]:
         return None
 
     try:
-        no_results = index[query_string]
+        print(query_string)
+        print(str(hash_string(query_string)))
+        no_results = index[str(hash_string(query_string))]
     except KeyError:
         return None
     return int(no_results)
@@ -35,7 +39,9 @@ def store_no_results(query_string: str, results) -> None:
         path_new = str(DEFAULT_PATHS[search_name]) + '/results_cache.csv'
         with open(path_new, 'a+', newline='') as csvfile:
             file_writer = csv.writer(csvfile, delimiter=',')
-            file_writer.writerow([str(query_string), str(no_results)])
+            print(query_string)
+            print(str(hash_string(query_string)))
+            file_writer.writerow([str(hash_string(query_string)), str(no_results)])
     search_name = results.__class__.__name__
 
     no_results = results.get_results_size()

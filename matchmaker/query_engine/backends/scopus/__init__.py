@@ -597,11 +597,11 @@ class AuthorSearchQueryEngine(
             return await author_search_on_query(author_search_query, client, self.api_key, self.institution_token)
         return get_data, get_metadata
     
-    async def _post_process(self, query: AuthorSearchQuery, data: List[ScopusAuthorSearchResult]) -> List[AuthorData]:
-        new_authors = []
+    async def _post_process(self, query: AuthorSearchQuery, data: List[ScopusAuthorSearchResult]) -> ScopusProcessedData[ScopusAuthorSearchResult, AuthorData]:
+
         model = AuthorData.generate_model_from_selector(query.selector)
-        for author in data:
-            author_dict = author.dict()
+        async def process_author_data(data: ScopusAuthorSearchResult) -> AuthorData:
+            author_dict = data.dict()
             new_author_dict = {}
             if AuthorDataSelector.parse_obj({'id': {'scopus_id': True}}) in query.selector:
                 new_author_dict['id'] = {'scopus_id': author_dict['eid'].split('-')[-1]}
@@ -660,8 +660,9 @@ class AuthorSearchQueryEngine(
                         processed.append((author_dict['country'], 'country'))
                         new_institution['processed'] = processed
                 new_author_dict['institution_current'] = new_institution
-            new_authors.append(model.parse_obj(new_author_dict))
-        return new_authors
+            return model.parse_obj(new_author_dict)
+        data_iter = iter(data)
+        return ScopusProcessedData[ScopusAuthorSearchResult, AuthorData](data_iter, process_author_data)
 
 
 class InstitutionSearchQueryEngine(
@@ -728,11 +729,10 @@ class InstitutionSearchQueryEngine(
             return await affiliation_search_on_query(affiliation_search_query, client, self.api_key, self.institution_token)
         return get_data, get_metadata
     
-    async def _post_process(self, query: InstitutionSearchQuery, data: List[AffiliationSearchResult]) -> List[InstitutionData]:
+    async def _post_process(self, query: InstitutionSearchQuery, data: List[AffiliationSearchResult]) -> ScopusProcessedData[AffiliationSearchResult, InstitutionData]:
         model = InstitutionData.generate_model_from_selector(query.selector)
-        new_papers = []
-        for paper in data:
-            paper_dict = paper.dict()
+        async def process_institution_data(data: InstitutionSearchQuery) -> InstitutionData:
+            paper_dict = data.dict()
             new_paper_dict = {}
             if InstitutionDataSelector.parse_obj({'id':{'scopus_id': True}}) in query.selector:
                 new_paper_dict['id'] = {'scopus_id': paper_dict['eid'].split('-')[-1]}
@@ -750,9 +750,9 @@ class InstitutionSearchQueryEngine(
                 if paper_dict['country'] is not None:
                     processed.append((paper_dict['country'], 'country'))
                 new_paper_dict['processed'] = processed
-            new_paper = model.parse_obj(new_paper_dict)
-            new_papers.append(new_paper)
-        return new_papers
+            return model.parse_obj(new_paper_dict)
+        data_iter = iter(data)
+        return ScopusProcessedData(data_iter, process_institution_data)
 
 
 class ScopusBackend(Backend):
