@@ -6,6 +6,10 @@ from matchmaker.query_engine.backends.scopus.quota_cache import (
     get_remaining_in_cache,
     store_quota_in_cache,
 )
+from matchmaker.query_engine.backends.scopus.results_cache import (
+    store_no_results,
+    get_no_results,
+)
 from matchmaker.query_engine.backends.scopus.utils import create_config
 from matchmaker.query_engine.types.query import (
     Abstract,
@@ -312,6 +316,7 @@ async def scopus_search_on_query(
     term = query_to_term(query.dict()['__root__'])
     scopus_results = ScopusSearch(term, view = view, verbose = True)
     store_quota_in_cache(scopus_results)
+    store_no_results(term, scopus_results)
     paper_results = scopus_results.results
     new_results =[]
     if paper_results is not None:
@@ -330,12 +335,20 @@ async def get_scopus_query_no_requests(
 ) -> int:
     create_config(api_key, institution_token)
     term = query_to_term(query.dict()['__root__'])
-    request_search = ScopusSearch(term, download = False, view = view)
-    store_quota_in_cache(request_search)
+
+    no_results = get_no_results('ScopusSearch', term)
+    if no_results is None:
+        request_search = ScopusSearch(term, download = False, view = view)
+        store_quota_in_cache(request_search)
+        # Note: View not required here, because number of results is independent of view
+        store_no_results(term, request_search)
+        no_results = get_no_results('ScopusSearch', term)
+        if no_results is None:
+            raise RuntimeError
     if view == 'COMPLETE':
-        return request_search.get_results_size()//Length.SCOPUS_COMPLETE_LENGTH +2
+        return no_results//Length.SCOPUS_COMPLETE_LENGTH +2
     else:
-        return request_search.get_results_size()//Length.SCOPUS_STANDARD_LENGTH +2
+        return no_results//Length.SCOPUS_STANDARD_LENGTH +2
 
 async def get_scopus_query_remaining_in_cache() -> int:
     try:
@@ -353,6 +366,7 @@ async def author_search_on_query(
     term = query_to_term(query.dict()['__root__'])
     author_results = AuthorSearch(term, verbose = True)
     store_quota_in_cache(author_results)
+    store_no_results(term, author_results)
     authors = author_results.authors
     new_authors =[]
     if authors is not None:
@@ -369,9 +383,15 @@ async def get_author_query_no_requests(
 ) -> int:
     create_config(api_key, institution_token)
     term = query_to_term(query.dict()['__root__'])
-    request_search = AuthorSearch(term, download = False)
-    store_quota_in_cache(request_search)
-    return request_search.get_results_size()//Length.AUTHOR_LENGTH +2
+    no_results = get_no_results('AuthorSearch', term)
+    if no_results is None:
+        request_search = AuthorSearch(term, download = False)
+        store_quota_in_cache(request_search)
+        store_no_results(term, request_search)
+        no_results = get_no_results('AuthorSearch', term)
+        if no_results is None:
+            raise RuntimeError
+    return no_results//Length.AUTHOR_LENGTH +2
 
 async def get_author_query_remaining_in_cache() -> int:
     try:
@@ -389,6 +409,7 @@ async def affiliation_search_on_query(
     term = query_to_term(query.dict()['__root__'])
     affil_results = AffiliationSearch(term, verbose = True)
     store_quota_in_cache(affil_results)
+    store_no_results(term, affil_results)
     affiliations = affil_results.affiliations
     new_affiliations =[]
     if affiliations is not None:
@@ -405,9 +426,16 @@ async def get_affiliation_query_no_requests(
 ) -> int:
     create_config(api_key, institution_token)
     term = query_to_term(query.dict()['__root__'])
-    request_search = AffiliationSearch(term, download = False)
-    store_quota_in_cache(request_search)
-    return request_search.get_results_size()//Length.AFFIL_LENGTH +2
+
+    no_results = get_no_results('AffiliationSearch', term)
+    if no_results is None:
+        request_search = AffiliationSearch(term, download = False)
+        store_quota_in_cache(request_search)
+        store_no_results(term, request_search)
+        no_results = get_no_results('AffiliationSearch', term)
+        if no_results is None:
+            raise RuntimeError
+    return no_results//Length.AFFIL_LENGTH +2
 
 async def get_affiliation_query_remaining_in_cache() -> int:
     try:
