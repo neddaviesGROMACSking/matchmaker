@@ -19,6 +19,9 @@ author_search = AuthorSearchQuery.parse_obj({
                 }
             }
         ]
+    },
+    'selector':{
+        'id': {'scopus_id': True}
     }
 })
 
@@ -38,7 +41,7 @@ paper_search = PaperSearchQuery.parse_obj({
                 'operator': {
                     'tag': 'range',
                     'lower_bound': '2001',
-                    'upper_bound': '2012'
+                    'upper_bound': '2004'
                 }
             }
         ]
@@ -58,17 +61,23 @@ inst_search = InstitutionSearchQuery.parse_obj({
             'tag': 'equal',
             'value': "Scotland"
         }
+    },
+    'selector':{
+        'id': {'scopus_id': True}
     }
 })
 
 
 
 async def main():
-    paper_results = await paper_searcher(paper_search)
+    native_query = await inst_searcher.get_native_query(inst_search)
+    metadata = await native_query.metadata()
+    paper_results = await inst_searcher.get_data_from_native_query(inst_search, native_query)
     
     #author_results = await author_searcher(author_search)
    
     #inst_results = await inst_searcher(inst_search)
-    return paper_results
-paper_results = asyncio.run(main())
+    return paper_results, metadata
+paper_results, metadata = asyncio.run(main())
 print(paper_results[0:4])
+print(metadata)

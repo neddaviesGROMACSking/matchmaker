@@ -278,33 +278,43 @@ class PaperSearchQueryEngine(
             [NewAsyncClient], 
             Awaitable[List[PubmedNativeData]]
         ], 
-        Dict[str,int]
+        Callable[[], Awaitable[Dict[str, Tuple[int, Optional[int]]]]]
     ]:
-        metadata = {
-            'esearch': 1,
-            'efetch': 0,
-            'elink': 0
-        }
         if query.selector in self.available_fields:
-            if query.selector.any_of_fields(self.efetch_fields):
-                metadata['esearch'] += 1
-            
-            if query.selector.any_of_fields(self.elink_refs_fields) or query.selector.any_of_fields(self.elink_refs_details_fields):
-                metadata['elink'] += 1
-                if query.selector.any_of_fields(self.elink_refs_details_fields):
-                    metadata['efetch'] += 1
-            
-            if query.selector.any_of_fields(self.elink_citeds_fields) or query.selector.any_of_fields(self.elink_citeds_details_fields):
-                metadata['elink'] += 1
-                if query.selector.any_of_fields(self.elink_citeds_details_fields):
-                    metadata['efetch'] += 1
-
+            pass
         else:
             overselected_fields = self.available_fields.get_values_overselected(query.selector)
             raise QueryNotSupportedError(overselected_fields)
+        
+        async def get_metadata() -> Dict[str, Tuple[int, Optional[int]]]:
+            def tuple_set_attr(old_tuple: Tuple[int,...], index: int, new_value) -> Tuple[int,...]:
+                if not index < len(old_tuple):
+                    raise ValueError(f'{index} not in {old_tuple}')
+                tuple_list = list(old_tuple)
+                tuple_list[index] = new_value
+                return tuple(tuple_list)
+            metadata = {
+                'esearch': (1, None),
+                'efetch': (0, None),
+                'elink': (0, None)
+            }
+            if query.selector.any_of_fields(self.efetch_fields):
+                metadata['efetch'] = tuple_set_attr(metadata['efetch'], 0, metadata['efetch'][0] + 1)
+            
+            if query.selector.any_of_fields(self.elink_refs_fields) or query.selector.any_of_fields(self.elink_refs_details_fields):
+                metadata['elink'] = tuple_set_attr(metadata['elink'], 0, metadata['elink'][0] + 1)
+                if query.selector.any_of_fields(self.elink_refs_details_fields):
+                    metadata['efetch'] = tuple_set_attr(metadata['efetch'], 0, metadata['efetch'][0] + 1)
+            
+            if query.selector.any_of_fields(self.elink_citeds_fields) or query.selector.any_of_fields(self.elink_citeds_details_fields):
+                metadata['elink'] = tuple_set_attr(metadata['elink'], 0, metadata['elink'][0] + 1)
+                if query.selector.any_of_fields(self.elink_citeds_details_fields):
+                    metadata['efetch'] = tuple_set_attr(metadata['efetch'], 0, metadata['efetch'][0] + 1)
+            return metadata
+        
         pubmed_search_query = paper_query_to_esearch(query)
 
-        async def make_coroutine(client: ClientSession) -> List[PubmedNativeData]:
+        async def get_data(client: ClientSession) -> List[PubmedNativeData]:
             async def id_mapper_to_unique_list(id_mapper: Dict[str, Optional[List[str]]]) -> List[str]:
                 unique_ids = []
                 for linked_ids in id_mapper.values():
@@ -429,7 +439,7 @@ class PaperSearchQueryEngine(
 
             return native_papers
 
-        return make_coroutine, metadata
+        return get_data, get_metadata
 
     async def _post_process(self, query: PaperSearchQuery, data: List[PubmedNativeData]) -> List[PaperData]:
         def process_sub_paper_data(data_dict, selector: SubPaperDataSelector):

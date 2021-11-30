@@ -46,7 +46,12 @@ paper_search = PaperSearchQuery.parse_obj({
 async def main():
 
     #sauthor_searcher = pubmed_backend.author_search_engine()
-    paper_results = await paper_searcher(paper_search)
+    #paper_results = await paper_searcher(paper_search)
+    native_query = await paper_searcher.get_native_query(paper_search)
+    metadata = await native_query.metadata()
+    paper_results = await paper_searcher.get_data_from_native_query(paper_search, native_query)
+    return paper_results, metadata
     #author_results = await author_searcher(author_search)
     return paper_results
-paper_results = asyncio.run(main())
+paper_results, metadata = asyncio.run(main())
+print(metadata)

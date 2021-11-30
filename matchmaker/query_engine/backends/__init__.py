@@ -17,6 +17,10 @@ from matchmaker.query_engine.types.query import (
     PaperSearchQuery,
 )
 import warnings
+
+MetadataType = Dict[str, Tuple[int, Optional[int]]]
+
+
 class RateLimiter:
     bunch_start: Optional[float]
     max_requests_per_second: int
@@ -67,14 +71,28 @@ with warnings.catch_warnings():
     
 NativeData = TypeVar('NativeData')
 
-@dataclass
 class BaseNativeQuery(Generic[NativeData], AbstractNativeQuery):
     coroutine_function: Callable[[NewAsyncClient], Awaitable[NativeData]]
-    metadata: Dict[str, int]
-    def count_api_calls(self):
-        return sum(self.metadata.values())
-    def count_api_calls_by_method(self, method: str):
-        return self.metadata[method]
+    _get_metadata: Callable[[], Awaitable[MetadataType]]
+    _metadata: Optional[MetadataType]
+    def __init__(
+        self, 
+        coroutine_function: Callable[[NewAsyncClient], Awaitable[NativeData]], 
+        get_metadata: Callable[[], Awaitable[MetadataType]]
+    ) -> None:
+        self.coroutine_function = coroutine_function
+        self._get_metadata = get_metadata
+        self._metadata = None
+    async def metadata(self):
+        return await self._get_metadata()
+    async def count_api_calls(self):
+        if self._metadata is None:
+            self._metadata = await self.metadata()
+        return sum(self._metadata.values())
+    async def count_api_calls_by_method(self, method: str):
+        if self._metadata is None:
+            self._metadata = await self.metadata()
+        return self._metadata[method]
 
 Query = TypeVar('Query')
 Data = TypeVar('Data')
@@ -88,14 +106,18 @@ class BaseBackendQueryEngine(
         self.rate_limiter = rate_limiter
         super().__init__(*args, **kwargs)
     
-    async def _query_to_awaitable(self, query: Query, client: NewAsyncClient) -> Tuple[Callable[[NewAsyncClient], Awaitable[NativeData]], Dict[str, int]]:
+    async def _query_to_awaitable(
+        self, 
+        query: Query, 
+        client: NewAsyncClient
+    ) -> Tuple[Callable[[NewAsyncClient], Awaitable[NativeData]], Callable[[], Awaitable[MetadataType]]]:
         raise NotImplementedError('This method is required for query_to_native')
     async def _query_to_native(self, query: Query) -> BaseNativeQuery[NativeData]:
         connector = TCPConnector(force_close=True)
         async with NewAsyncClient(connector = connector, rate_limiter = self.rate_limiter) as client:
             coro = self._query_to_awaitable(query,  client)
-            awaitable, metadata = await coro
-        return BaseNativeQuery(awaitable, metadata)
+            coroutine_function, get_metadata = await coro
+        return BaseNativeQuery(coroutine_function, get_metadata)
 
     async def _run_native_query(self, query: BaseNativeQuery[NativeData]) -> NativeData:
         connector = TCPConnector(force_close=True)

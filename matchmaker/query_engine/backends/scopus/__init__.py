@@ -1,5 +1,5 @@
 from html import unescape
-from typing import Awaitable, Callable, Dict, List, Tuple
+from typing import Awaitable, Callable, Dict, List, Tuple, Optional
 from matchmaker import query_engine
 from matchmaker.query_engine.backend import Backend
 from matchmaker.query_engine.backends import (
@@ -8,6 +8,7 @@ from matchmaker.query_engine.backends import (
     BasePaperSearchQueryEngine,
     NewAsyncClient,
     RateLimiter,
+    MetadataType
 )
 from matchmaker.query_engine.backends.scopus.api import (
     AffiliationSearchQuery,
@@ -248,9 +249,19 @@ class PaperSearchQueryEngine(
         self, 
         query: PaperSearchQuery, 
         client: NewAsyncClient
-    ) -> Tuple[Callable[[NewAsyncClient], Awaitable[List[ScopusSearchResult]]], Dict[str, int]]:
+    ) -> Tuple[
+            Callable[
+                [NewAsyncClient], 
+                Awaitable[List[ScopusSearchResult]]
+            ], 
+            Callable[
+                [], 
+                Awaitable[MetadataType]
+            ]
+        ]:
+
         scopus_search_query = paper_query_to_scopus(query)
-        cache_remaining = await get_scopus_query_remaining_in_cache()
+
 
         if query.selector in self.available_fields:
             if query.selector in self.standard_fields:
@@ -261,19 +272,30 @@ class PaperSearchQueryEngine(
             overselected_fields = self.available_fields.get_values_overselected(query.selector)
             raise QueryNotSupportedError(overselected_fields)
 
-        if cache_remaining > 1:
-            no_requests = await get_scopus_query_no_requests(scopus_search_query, client, view, self.api_key, self.institution_token)
-        else:
-            raise NotEnoughRequests()
-        cache_remaining = await get_scopus_query_remaining_in_cache()
-        if no_requests > cache_remaining:
-            raise NotEnoughRequests()
-        metadata = {
-            'scopus_search': no_requests,
-        }
-        async def make_coroutine(client: NewAsyncClient) -> List[ScopusSearchResult]:
+
+        async def get_metadata() -> MetadataType:
+            cache_remaining: int = await get_scopus_query_remaining_in_cache()
+            if cache_remaining > 1:
+                no_requests: int = await get_scopus_query_no_requests(scopus_search_query, client, view, self.api_key, self.institution_token)
+            else:
+                raise NotEnoughRequests()
+            cache_remaining: int = await get_scopus_query_remaining_in_cache()
+            return {
+                'scopus_search': (no_requests, cache_remaining)
+            }
+
+        async def get_data(client: NewAsyncClient) -> List[ScopusSearchResult]:
+            cache_remaining = await get_scopus_query_remaining_in_cache()
+            if cache_remaining > 1:
+                no_requests = await get_scopus_query_no_requests(scopus_search_query, client, view, self.api_key, self.institution_token)
+            else:
+                raise NotEnoughRequests()
+            cache_remaining = await get_scopus_query_remaining_in_cache()
+            if no_requests > cache_remaining:
+                raise NotEnoughRequests()
+            
             return await scopus_search_on_query(scopus_search_query, client, view, self.api_key, self.institution_token)
-        return make_coroutine, metadata
+        return get_data, get_metadata
     
     async def _post_process(self, query: PaperSearchQuery, data: List[ScopusSearchResult]) -> List[PaperData]:
         new_papers = []
@@ -511,25 +533,45 @@ class AuthorSearchQueryEngine(
         self, 
         query: AuthorSearchQuery, 
         client: NewAsyncClient
-    ) -> Tuple[Callable[[NewAsyncClient], Awaitable[List[ScopusAuthorSearchResult]]], Dict[str, int]]:
+    ) -> Tuple[
+            Callable[
+                [NewAsyncClient], 
+                Awaitable[List[ScopusAuthorSearchResult]]
+            ], 
+            Callable[
+                [], 
+                Awaitable[MetadataType]
+            ]
+        ]:
+        
         if query.selector not in self.available_fields:
             overselected_fields = self.available_fields.get_values_overselected(query.selector)
             raise QueryNotSupportedError(overselected_fields)
         author_search_query = author_query_to_scopus_author(query)
-        cache_remaining = await get_author_query_remaining_in_cache()
-        if cache_remaining > 1:
-            no_requests = await get_author_query_no_requests(author_search_query, client, self.api_key, self.institution_token)
-        else:
-            raise NotEnoughRequests()
-        cache_remaining = await get_author_query_remaining_in_cache()
-        if no_requests > cache_remaining:
-            raise NotEnoughRequests()
-        metadata = {
-            'author_search': no_requests,
-        }
-        async def make_coroutine(client: NewAsyncClient) -> List[ScopusAuthorSearchResult]:
+
+        async def get_metadata() -> MetadataType:
+            cache_remaining = await get_author_query_remaining_in_cache()
+            if cache_remaining > 1:
+                no_requests = await get_author_query_no_requests(author_search_query, client, self.api_key, self.institution_token)
+            else:
+                raise NotEnoughRequests()
+            cache_remaining = await get_author_query_remaining_in_cache()
+            metadata: MetadataType = {
+                'author_search': (no_requests, cache_remaining)
+            }
+            return metadata
+        async def get_data(client: NewAsyncClient) -> List[ScopusAuthorSearchResult]:
+            cache_remaining = await get_author_query_remaining_in_cache()
+            if cache_remaining > 1:
+                no_requests = await get_author_query_no_requests(author_search_query, client, self.api_key, self.institution_token)
+            else:
+                raise NotEnoughRequests()
+            cache_remaining = await get_author_query_remaining_in_cache()
+            if no_requests > cache_remaining:
+                raise NotEnoughRequests()
+            
             return await author_search_on_query(author_search_query, client, self.api_key, self.institution_token)
-        return make_coroutine, metadata
+        return get_data, get_metadata
     
     async def _post_process(self, query: AuthorSearchQuery, data: List[ScopusAuthorSearchResult]) -> List[AuthorData]:
         new_authors = []
@@ -620,27 +662,47 @@ class InstitutionSearchQueryEngine(
         self, 
         query: InstitutionSearchQuery, 
         client: NewAsyncClient
-    ) -> Tuple[Callable[[NewAsyncClient], Awaitable[List[AffiliationSearchResult]]], Dict[str, int]]:
-        
+    ) -> Tuple[
+            Callable[
+                [NewAsyncClient], 
+                Awaitable[List[AffiliationSearchResult]]
+            ], 
+            Callable[
+                [], 
+                Awaitable[MetadataType]
+            ]
+        ]:
         if query.selector not in self.available_fields:
             overselected_fields = self.available_fields.get_values_overselected(query.selector)
             raise QueryNotSupportedError(overselected_fields)
         
         affiliation_search_query = institution_query_to_affiliation(query)
-        cache_remaining = await get_affiliation_query_remaining_in_cache()
-        if cache_remaining > 1:
-            no_requests = await get_affiliation_query_no_requests(affiliation_search_query, client, self.api_key, self.institution_token)
-        else:
-            raise NotEnoughRequests()
-        cache_remaining = await get_affiliation_query_remaining_in_cache()
-        if no_requests > cache_remaining:
-            raise NotEnoughRequests()
-        metadata = {
-            'affiliation_search': no_requests,
-        }
-        async def make_coroutine(client: NewAsyncClient) -> List[AffiliationSearchResult]:
+        
+        async def get_metadata() -> MetadataType:
+            cache_remaining = await get_affiliation_query_remaining_in_cache()
+            if cache_remaining > 1:
+                no_requests = await get_affiliation_query_no_requests(affiliation_search_query, client, self.api_key, self.institution_token)
+            else:
+                raise NotEnoughRequests()
+            cache_remaining = await get_affiliation_query_remaining_in_cache()
+
+            metadata: MetadataType = {
+                'affiliation_search': (no_requests, cache_remaining)
+            }
+            return metadata
+        
+        async def get_data(client: NewAsyncClient) -> List[AffiliationSearchResult]:
+            cache_remaining = await get_affiliation_query_remaining_in_cache()
+            if cache_remaining > 1:
+                no_requests = await get_affiliation_query_no_requests(affiliation_search_query, client, self.api_key, self.institution_token)
+            else:
+                raise NotEnoughRequests()
+            cache_remaining = await get_affiliation_query_remaining_in_cache()
+            if no_requests > cache_remaining:
+                raise NotEnoughRequests()
+            
             return await affiliation_search_on_query(affiliation_search_query, client, self.api_key, self.institution_token)
-        return make_coroutine, metadata
+        return get_data, get_metadata
     
     async def _post_process(self, query: InstitutionSearchQuery, data: List[AffiliationSearchResult]) -> List[InstitutionData]:
         model = InstitutionData.generate_model_from_selector(query.selector)
