@@ -1,15 +1,16 @@
 from html import unescape
-from typing import Awaitable, Callable, Dict, List, Tuple, Optional
+from typing import AsyncIterator, Awaitable, Callable, Dict, Generic, Iterator, List, Tuple, Optional, TypeVar
 from matchmaker import query_engine
 from matchmaker.query_engine.backend import Backend
-from matchmaker.query_engine.backends import (
-    BaseAuthorSearchQueryEngine,
-    BaseInstitutionSearchQueryEngine,
-    BasePaperSearchQueryEngine,
+from matchmaker.query_engine.backends.web import (
+    WebAuthorSearchQueryEngine,
+    WebInstitutionSearchQueryEngine,
+    WebPaperSearchQueryEngine,
     NewAsyncClient,
     RateLimiter,
-    MetadataType
+    WebNativeQuery
 )
+from matchmaker.query_engine.backends import MetadataType
 from matchmaker.query_engine.backends.scopus.api import (
     AffiliationSearchQuery,
     AffiliationSearchResult,
@@ -187,8 +188,30 @@ def institution_query_to_affiliation(query: InstitutionSearchQuery) -> Affiliati
     check_model_tags(model_tags, new_query_dict)
     return AffiliationSearchQuery.parse_obj(new_query_dict) 
 
+
+DataForProcess = TypeVar('DataForProcess')
+ProcessedData = TypeVar('ProcessedData')
+class ScopusProcessedData(AsyncIterator, Generic[DataForProcess, ProcessedData]):
+    _iterator: Iterator[DataForProcess]
+    _processor: Callable[[DataForProcess], Awaitable[ProcessedData]]
+    def __init__(self, iterator: Iterator[DataForProcess], processing_func: Callable[[DataForProcess], Awaitable[ProcessedData]]) -> None:
+        self._iterator = iterator
+        self._processor = processing_func
+        super().__init__()
+    async def __anext__(self):
+        try:
+            next_item = next(self._iterator)
+        except StopIteration:
+            raise StopAsyncIteration
+        return await self._processor(next_item)
+    def __aiter__(self) -> AsyncIterator[DataForProcess]:
+        return self
+
+        
+    #raise NotImplementedError
+
 class PaperSearchQueryEngine(
-        BasePaperSearchQueryEngine[List[ScopusSearchResult]]):
+        WebPaperSearchQueryEngine[WebNativeQuery[List[ScopusSearchResult]],List[ScopusSearchResult], ScopusProcessedData[ScopusSearchResult, PaperData]]):
     def __init__(self, api_key:str , institution_token: str, rate_limiter: RateLimiter = RateLimiter(max_requests_per_second = 9), *args, **kwargs):
         self.api_key = api_key
         self.institution_token = institution_token
@@ -297,13 +320,12 @@ class PaperSearchQueryEngine(
             return await scopus_search_on_query(scopus_search_query, client, view, self.api_key, self.institution_token)
         return get_data, get_metadata
     
-    async def _post_process(self, query: PaperSearchQuery, data: List[ScopusSearchResult]) -> List[PaperData]:
-        new_papers = []
+    async def _post_process(self, query: PaperSearchQuery, data: List[ScopusSearchResult]) -> ScopusProcessedData[ScopusSearchResult, PaperData]:
         model = PaperData.generate_model_from_selector(query.selector)
-        for i, paper in enumerate(data):
-            new_paper_dict ={}
-            paper_dict = paper.dict()
 
+        async def process_paper_data(data: ScopusSearchResult) -> PaperData:
+            new_paper_dict ={}
+            paper_dict = data.dict()
             paper_id = {}
             if query.selector.any_of_fields(
                 PaperDataSelector.parse_obj({
@@ -495,13 +517,15 @@ class PaperSearchQueryEngine(
                 else:
                     new_institutions = None
                 new_paper_dict['institutions'] = new_institutions
+            return model.parse_obj(new_paper_dict)
+        new_papers = []
+        data_iter = iter(data)
+        return ScopusProcessedData[ScopusSearchResult, PaperData](data_iter, process_paper_data)
 
-            new_papers.append(model.parse_obj(new_paper_dict))
-        return new_papers
 
 
 class AuthorSearchQueryEngine(
-    BaseAuthorSearchQueryEngine[List[ScopusAuthorSearchResult]]
+    WebAuthorSearchQueryEngine[WebNativeQuery[List[ScopusAuthorSearchResult]],List[ScopusAuthorSearchResult], ScopusProcessedData[ScopusAuthorSearchResult, AuthorData]]
 ):
     def __init__(self, api_key:str , institution_token: str, rate_limiter: RateLimiter = RateLimiter(max_requests_per_second = 2), *args, **kwargs):
         self.api_key = api_key
@@ -641,7 +665,7 @@ class AuthorSearchQueryEngine(
 
 
 class InstitutionSearchQueryEngine(
-    BaseInstitutionSearchQueryEngine[List[AffiliationSearchResult]]
+    WebInstitutionSearchQueryEngine[WebNativeQuery[List[AffiliationSearchResult]],List[AffiliationSearchResult], ScopusProcessedData[AffiliationSearchResult, InstitutionData]]
 ):
     def __init__(self, api_key:str , institution_token: str, rate_limiter: RateLimiter = RateLimiter(max_requests_per_second = 6), *args, **kwargs):
         self.api_key = api_key
