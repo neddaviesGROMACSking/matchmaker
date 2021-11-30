@@ -1,71 +1,98 @@
 
-from matchmaker.query_engine.slightly_less_abstract import AbstractNativeQuery
-from typing import Optional, Tuple, Callable, Awaitable, Dict, List, Generic, TypeVar, Union, Any
-
 from dataclasses import dataclass
-
 from dataclasses import dataclass
-
+from typing import (
+    Any,
+    AsyncIterator,
+    Awaitable,
+    Callable,
+    Dict,
+    Generic,
+    List,
+    Optional,
+    Tuple,
+    TypeVar,
+    Union,
+)
 from typing import Awaitable, Callable, Dict, Generic, Optional, Tuple, TypeVar
 
-from matchmaker.query_engine.types.data import AuthorData, PaperData, InstitutionData
-from matchmaker.query_engine.types.query import AuthorSearchQuery, PaperSearchQuery, InstitutionSearchQuery
+from matchmaker.query_engine.backends import (
+    BaseBackendQueryEngine,
+    BaseNativeQuery,
+    GetMetadata,
+    BasePaperSearchQueryEngine,
+    BaseAuthorSearchQueryEngine,
+    BaseInstitutionSearchQueryEngine
+)
+from matchmaker.query_engine.slightly_less_abstract import AbstractNativeQuery
 from matchmaker.query_engine.slightly_less_abstract import (
     AbstractNativeQuery,
     SlightlyLessAbstractQueryEngine,
 )
+from matchmaker.query_engine.types.data import AuthorData, InstitutionData, PaperData
+from matchmaker.query_engine.types.query import (
+    AuthorSearchQuery,
+    InstitutionSearchQuery,
+    PaperSearchQuery,
+)
 
 NativeData = TypeVar('NativeData')
-@dataclass
-class BaseNativeQuery(Generic[NativeData], AbstractNativeQuery):
-    coroutine_function: Callable[[], Awaitable[NativeData]]
-    metadata: Dict[str, int]
-    def count_api_calls(self):
-        return sum(self.metadata.values())
-    def count_api_calls_by_method(self, method: str):
-        return self.metadata[method]
-
 Query = TypeVar('Query')
 Data = TypeVar('Data')
 
+class MetaNativeQuery(
+    Generic[NativeData], 
+    BaseNativeQuery[
+        NativeData, 
+        Callable[[], Awaitable[NativeData]]
+    ]
+):
+    pass
 
+Query = TypeVar('Query')
+ProcessedData = TypeVar('ProcessedData', bound = AsyncIterator)
+NativeQuery = TypeVar('NativeQuery', bound = MetaNativeQuery)
+DataElement = TypeVar('DataElement')
 
-class BaseBackendQueryEngine(
-    Generic[Query, NativeData, Data], 
-    SlightlyLessAbstractQueryEngine[Query, BaseNativeQuery[NativeData], NativeData, Data]
+class MetaQueryEngine(
+    Generic[Query, NativeData, Data, ProcessedData, DataElement], 
+    BaseBackendQueryEngine[
+        Query,
+        MetaNativeQuery[NativeData], 
+        NativeData, 
+        ProcessedData,
+        DataElement
+    ]
 ):    
-    async def _query_to_awaitable(self, query: Query) -> Tuple[Callable[[], Awaitable[NativeData]], Dict[str, int]]:
+    async def _query_to_awaitable(self, query: Query) -> Tuple[Callable[[], Awaitable[NativeData]], GetMetadata]:
         raise NotImplementedError('This method is required for query_to_native')
-    async def _query_to_native(self, query: Query) -> BaseNativeQuery[NativeData]:
+    async def _query_to_native(self, query: Query) -> MetaNativeQuery[NativeData]:
         awaitable, metadata = await self._query_to_awaitable(query)
-        return BaseNativeQuery(awaitable, metadata)
+        return MetaNativeQuery(awaitable, metadata)
     
-    async def _run_native_query(self, query: BaseNativeQuery[NativeData]) -> NativeData:
+    async def _run_native_query(self, query: MetaNativeQuery[NativeData]) -> NativeData:
         return await query.coroutine_function()
-    
-    async def _post_process(self, query: Query, data: NativeData) -> Data:
-        raise NotImplementedError('Calling method on abstract base class')
-
-    async def __call__(self, query: Query) -> Data:
-        nd = await self._run_native_query(await self._query_to_native(query))
-        return await self._post_process(query, nd)
 
 
-class BasePaperSearchQueryEngine(
-    Generic[NativeData], 
-    BaseBackendQueryEngine[PaperSearchQuery, NativeData, PaperData]
+
+class MetaPaperSearchQueryEngine(
+    Generic[NativeQuery, NativeData, ProcessedData],
+    BasePaperSearchQueryEngine[NativeQuery, NativeData, ProcessedData],
+    MetaQueryEngine[PaperSearchQuery, NativeQuery, NativeData, ProcessedData, PaperData],
+
 ):
     pass
 
-
-class BaseAuthorSearchQueryEngine(
-    Generic[NativeData], 
-    BaseBackendQueryEngine[AuthorSearchQuery, NativeData, AuthorData]
+class MetaAuthorSearchQueryEngine(
+    Generic[NativeQuery, NativeData, ProcessedData],
+    BaseAuthorSearchQueryEngine[NativeQuery, NativeData, ProcessedData],
+    MetaQueryEngine[AuthorSearchQuery, NativeQuery, NativeData, ProcessedData, AuthorData],
 ):
     pass
 
-class BaseInstitutionSearchQueryEngine(
-    Generic[NativeData], 
-    BaseBackendQueryEngine[InstitutionSearchQuery, NativeData, InstitutionData]
+class MetaInstitutionSearchQueryEngine(
+    Generic[NativeQuery, NativeData, ProcessedData],
+    BaseInstitutionSearchQueryEngine[NativeQuery, NativeData, ProcessedData],
+    MetaQueryEngine[InstitutionSearchQuery, NativeQuery, NativeData, ProcessedData, InstitutionData],
 ):
     pass
