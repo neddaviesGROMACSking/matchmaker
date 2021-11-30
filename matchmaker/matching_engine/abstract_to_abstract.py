@@ -6,6 +6,11 @@ from gensim import similarities
 from matchmaker import query_engine
 import numpy as np
 
+import hashlib
+
+def hash_string(string:str) -> int:
+    return int(hashlib.sha1(string.encode("utf-8")).hexdigest(), 16) % (10 ** 8)
+    
 def produce_similarities(
     abstract_set1: List[str], 
     abstract_set2: List[str],
@@ -42,7 +47,7 @@ def produce_similarities(
             combined_set += text
         
         combined_set = ''.join(combined_set)
-        hash_value = str(abs(hash(combined_set)))
+        hash_value = str(abs(hash_string(combined_set)))
         return hash_value
 
     texts = generate_texts(abstract_set1, excluded_words, remove_singleton_words=remove_singleton_words)
