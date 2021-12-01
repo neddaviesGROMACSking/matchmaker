@@ -97,3 +97,16 @@ class ProcessDataIter(AsyncIterator, Generic[DataForProcess, ProcessedData]):
         return await self._processor(next_item)
     def __aiter__(self) -> AsyncIterator[DataForProcess]:
         return self
+
+class AsyncProcessDataIter(AsyncIterator, Generic[DataForProcess, ProcessedData]):
+    _iterator: AsyncIterator[DataForProcess]
+    _processor: Callable[[DataForProcess], Awaitable[ProcessedData]]
+    def __init__(self, iterator: AsyncIterator[DataForProcess], processing_func: Callable[[DataForProcess], Awaitable[ProcessedData]]) -> None:
+        self._iterator = iterator
+        self._processor = processing_func
+        super().__init__()
+    async def __anext__(self):
+        next_item = await self._iterator.__anext__()
+        return await self._processor(next_item)
+    def __aiter__(self) -> AsyncIterator[DataForProcess]:
+        return self._iterator

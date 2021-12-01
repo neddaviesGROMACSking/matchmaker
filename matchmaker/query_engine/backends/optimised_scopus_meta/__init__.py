@@ -10,7 +10,7 @@ from matchmaker.query_engine.types.selector import AuthorDataAllSelected, Instit
 from matchmaker.query_engine.slightly_less_abstract import AbstractNativeQuery
 from matchmaker.query_engine.slightly_less_abstract import SlightlyLessAbstractQueryEngine
 from matchmaker.query_engine.backend import Backend
-from typing import Optional, Tuple, Callable, Awaitable, Dict, List, Generic, TypeVar, Union, Any
+from typing import AsyncIterator, Optional, Tuple, Callable, Awaitable, Dict, List, Generic, TypeVar, Union, Any
 from asyncio import get_running_loop, gather
 from matchmaker.query_engine.backends.exceptions import QueryNotSupportedError, SearchNotPossible
 from dataclasses import dataclass
@@ -20,8 +20,9 @@ from pybliometrics.scopus.utils.constants import SEARCH_MAX_ENTRIES
 from matchmaker.query_engine.backends.tools import TagNotFound, execute_callback_on_tag
 from pybliometrics.scopus.exception import ScopusQueryError
 from copy import deepcopy
-from matchmaker.query_engine.backends.metas import BaseNativeQuery, BasePaperSearchQueryEngine, BaseAuthorSearchQueryEngine
-
+from matchmaker.query_engine.backends.metas import MetaNativeQuery, MetaPaperSearchQueryEngine, MetaAuthorSearchQueryEngine
+from matchmaker.query_engine.backends import AsyncProcessDataIter, MetadataType
+from enum import Enum
 DictStructure = Dict[str, Union[str, 'ListStructure', 'DictStructure']]
 ListStructure = List[Union[str, 'ListStructure', 'DictStructure']]
 
@@ -64,7 +65,12 @@ async def get_doi_query_from_list(dois: List[str], selector) -> PaperSearchQuery
 async def get_dois_remaining(scopus_dois: List[str], pubmed_dois: List[str]) -> List[str]:
     return [doi for doi in scopus_dois if doi not in pubmed_dois]
 
-class PaperSearchQueryEngine(BasePaperSearchQueryEngine[List[PaperData]]):
+DataForProcess = TypeVar('DataForProcess')
+ProcessedData = TypeVar('ProcessedData')
+class ProcessedMeta(AsyncProcessDataIter[DataForProcess, ProcessedData]):
+    pass
+
+class PaperSearchQueryEngine(MetaPaperSearchQueryEngine[MetaNativeQuery[AsyncIterator[PaperData]],AsyncIterator[PaperData], ProcessedMeta[List[PaperData]]]):
     def __init__(
         self, 
         scopus_paper_search,
@@ -84,10 +90,15 @@ class PaperSearchQueryEngine(BasePaperSearchQueryEngine[List[PaperData]]):
             self.pubmed_paper_search.available_fields
         ]
     
-    async def _query_to_awaitable(self, query: PaperSearchQuery) -> Tuple[Callable[[], Awaitable[List[PaperData]]], Dict[str, int]]:
+    async def _query_to_awaitable(self, query: PaperSearchQuery) -> Tuple[Callable[[], Awaitable[List[PaperData]]], MetadataType]:
         if query.selector not in self.available_fields:
             overselected_fields = self.available_fields.get_values_overselected(query.selector)
             raise QueryNotSupportedError(overselected_fields)
+
+
+        scopus_standard_fields = self.scopus_paper_search.possible_searches[1]
+        scopus_complete_fields = self.scopus_paper_search.possible_searches[0]
+        pubmed_fields = self.pubmed_paper_search.available_fields
 
         scopus_query_selector = PaperDataSelector.generate_subset_selector(query.selector, self.scopus_paper_search.available_fields)
         scopus_query = deepcopy(query)
@@ -98,8 +109,6 @@ class PaperSearchQueryEngine(BasePaperSearchQueryEngine[List[PaperData]]):
         full_native_request_no = full_native_query.metadata['scopus_search']
         standard_query = deepcopy(query)
         standard_query.selector = self.doi_selector
-        standard_native_query = await self.scopus_paper_search.get_native_query(standard_query) 
-        standard_native_request_no = standard_native_query.metadata['scopus_search']
         # For pubmed it's always the same, so this can be a good estimate
         # TODO Get estimate some other way - standard query not always supported by pubmed
         #pubmed_native_query = await self.pubmed_paper_search.get_native_query(standard_query)
@@ -109,7 +118,29 @@ class PaperSearchQueryEngine(BasePaperSearchQueryEngine[List[PaperData]]):
         }
         pubmed_selector = PaperDataSelector.generate_subset_selector(query.selector, self.pubmed_paper_search.available_fields)
         
-        async def make_coroutine() -> List[PaperData]:
+        class Strategy(Enum):
+            ScopusStandard = 'ScopusStandard'
+            ScopusStandardThenPubmedThenScopusComplete = 'ScopusStandardThenPubmedThenScopusComplete'
+            ScopusComplete = 'ScopusComplete'
+            ScopusCompleteThenPubmed = 'ScopusCompleteThenPubmed'
+        
+
+        if query.selector in scopus_standard_fields:
+            strategy = Strategy.ScopusStandard
+        elif query.selector in (scopus_standard_fields | pubmed_fields):
+            strategy = Strategy.ScopusStandardThenPubmedThenScopusComplete
+        elif query.selector in scopus_complete_fields:
+            strategy = Strategy.ScopusComplete
+        elif query.selector in (scopus_complete_fields | pubmed_fields):
+            strategy = Strategy.ScopusCompleteThenPubmed
+        else:
+            raise ValueError('Fields set as available but no strategy supported')
+
+
+        async def get_metadata() -> MetadataType:
+            raise NotImplementedError
+
+        async def get_data() -> List[PaperData]:
             """
             If you select just dois, standard query is all you get
             If you select fields from pubmed intercept scopus, you get pubmed results and maybe go back to scopus for more data
@@ -167,7 +198,7 @@ class PaperSearchQueryEngine(BasePaperSearchQueryEngine[List[PaperData]]):
             else:
                 raise SearchNotPossible
         
-        return make_coroutine, metadata
+        return get_data, get_metadata
 
     async def _post_process(self, query: PaperSearchQuery, data: List[PaperData]) -> List[PaperData]:
         def merge_papers(paper: List[PaperData]) -> PaperData:
@@ -188,7 +219,7 @@ class PaperSearchQueryEngine(BasePaperSearchQueryEngine[List[PaperData]]):
         return new_data
 
 
-class AuthorSearchQueryEngine(BaseAuthorSearchQueryEngine[List[AuthorData]]):
+class AuthorSearchQueryEngine(MetaAuthorSearchQueryEngine[List[AuthorData]]):
     scopus_paper_search: ScopusPaperSearchQueryEngine
     scopus_author_search: ScopusAuthorSearchQueryEngine
     scopus_institution_search: ScopusInstitutionSearchQueryEngine

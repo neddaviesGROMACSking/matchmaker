@@ -6,7 +6,7 @@ from typing import Annotated, Awaitable, Callable, Dict, List, Tuple, TypeVar, U
 
 from aiohttp import ClientSession
 from matchmaker.query_engine.backend import Backend
-from matchmaker.query_engine.backends import ProcessDataIter
+from matchmaker.query_engine.backends import MetadataType, ProcessDataIter
 from matchmaker.query_engine.backends.web import (
     WebAuthorSearchQueryEngine,
     WebPaperSearchQueryEngine,
@@ -296,7 +296,7 @@ class PaperSearchQueryEngine(
             overselected_fields = self.available_fields.get_values_overselected(query.selector)
             raise QueryNotSupportedError(overselected_fields)
         
-        async def get_metadata() -> Dict[str, Tuple[int, Optional[int]]]:
+        async def get_metadata() -> MetadataType:
             def tuple_set_attr(old_tuple: Tuple[int,...], index: int, new_value) -> Tuple[int,...]:
                 if not index < len(old_tuple):
                     raise ValueError(f'{index} not in {old_tuple}')
