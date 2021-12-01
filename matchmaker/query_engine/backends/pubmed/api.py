@@ -83,91 +83,91 @@ class PubmedESearchData(BaseModel):
     ret_max: int
     ret_start: int
 
+def query_to_term(query):
+    def make_year_term(start_year:int = 1000, end_year:int = 3000):
+        if start_year==end_year:
+            return f'("{start_year}"[Date - Publication])'
+        else:
+            return f'("{start_year}"[Date - Publication] : "{end_year}"[Date - Publication])'
+
+    def make_string_term(string, value, operator):
+        if operator == 'in' and len(value) > 4:
+            return f'({value}*[{string}])'
+        elif operator == 'in':
+            raise ValueError(f'Value {value} in section {string} too short for operator "in"')
+        else:
+            return f'({value}[{string}])'
+    
+    if query['tag'] == 'and':
+        fields = query['fields_']
+        return '('+' AND '.join([query_to_term(field) for field in fields])+')'
+    elif query['tag'] == 'or':
+        fields = query['fields_']
+        return '('+' OR '.join([query_to_term(field) for field in fields])+')'
+    elif query['tag'] == 'pmid':
+        operator = query['operator']
+        value = operator['value']
+        return make_string_term('PMID', value, operator)
+    elif query['tag'] == 'meshtopic':
+        operator = query['operator']
+        value = operator['value']
+        return make_string_term('MeSH Major Topic', value, operator)
+    elif query['tag'] == 'elocationid':
+        operator = query['operator']
+        value = operator['value']
+        return make_string_term('Location ID', value, operator)
+    elif query['tag'] == 'title':
+        operator = query['operator']
+        value = operator['value']
+        return make_string_term('Title', value, operator)
+    elif query['tag'] == 'author':
+        operator = query['operator']
+        value = operator['value']
+        return make_string_term('Author', value, operator)
+    elif query['tag'] == 'journal':
+        operator = query['operator']
+        value = operator['value']
+        return make_string_term('Journal', value, operator)
+    elif query['tag'] == 'abstract':
+        operator = query['operator']
+        value = operator['value']
+        return make_string_term('Abstract', value, operator)
+    elif query['tag'] == 'institution':
+        operator = query['operator']
+        value = operator['value']
+        return make_string_term('Affiliation', value, operator)
+    
+    elif query['tag'] == 'keyword':
+        operator = query['operator']
+        value = operator['value']
+        return make_string_term('Other Term', value, operator)
+    
+    elif query['tag'] == 'year':
+        operator = query['operator']
+        if operator['tag'] =='equal':
+            value = operator['value']
+            return make_year_term(value,value)
+        elif operator['tag'] == 'lt':
+            value = operator['value']
+            return make_year_term(end_year=value)
+        elif operator['tag'] == 'gt':
+            value = operator['value']
+            return make_year_term(start_year=value)
+        elif operator['tag'] == 'range':
+            lower_bound = operator['lower_bound']
+            upper_bound = operator['upper_bound']
+            return make_year_term(lower_bound,upper_bound)
+        else:
+            raise ValueError('Unknown tag')
+    else:
+        raise ValueError('Unknown tag')
+
 # ESearch
 async def esearch_on_query(
     query: PubmedESearchQuery,
     client: ClientSession,
     api_key: str = None
 ) -> PubmedESearchData:
-    def query_to_term(query):
-        def make_year_term(start_year:int = 1000, end_year:int = 3000):
-            if start_year==end_year:
-                return f'("{start_year}"[Date - Publication])'
-            else:
-                return f'("{start_year}"[Date - Publication] : "{end_year}"[Date - Publication])'
-
-        def make_string_term(string, value, operator):
-            if operator == 'in' and len(value) > 4:
-                return f'({value}*[{string}])'
-            elif operator == 'in':
-                raise ValueError(f'Value {value} in section {string} too short for operator "in"')
-            else:
-                return f'({value}[{string}])'
-        
-        if query['tag'] == 'and':
-            fields = query['fields_']
-            return '('+' AND '.join([query_to_term(field) for field in fields])+')'
-        elif query['tag'] == 'or':
-            fields = query['fields_']
-            return '('+' OR '.join([query_to_term(field) for field in fields])+')'
-        elif query['tag'] == 'pmid':
-            operator = query['operator']
-            value = operator['value']
-            return make_string_term('PMID', value, operator)
-        elif query['tag'] == 'meshtopic':
-            operator = query['operator']
-            value = operator['value']
-            return make_string_term('MeSH Major Topic', value, operator)
-        elif query['tag'] == 'elocationid':
-            operator = query['operator']
-            value = operator['value']
-            return make_string_term('Location ID', value, operator)
-        elif query['tag'] == 'title':
-            operator = query['operator']
-            value = operator['value']
-            return make_string_term('Title', value, operator)
-        elif query['tag'] == 'author':
-            operator = query['operator']
-            value = operator['value']
-            return make_string_term('Author', value, operator)
-        elif query['tag'] == 'journal':
-            operator = query['operator']
-            value = operator['value']
-            return make_string_term('Journal', value, operator)
-        elif query['tag'] == 'abstract':
-            operator = query['operator']
-            value = operator['value']
-            return make_string_term('Abstract', value, operator)
-        elif query['tag'] == 'institution':
-            operator = query['operator']
-            value = operator['value']
-            return make_string_term('Affiliation', value, operator)
-        
-        elif query['tag'] == 'keyword':
-            operator = query['operator']
-            value = operator['value']
-            return make_string_term('Other Term', value, operator)
-        
-        elif query['tag'] == 'year':
-            operator = query['operator']
-            if operator['tag'] =='equal':
-                value = operator['value']
-                return make_year_term(value,value)
-            elif operator['tag'] == 'lt':
-                value = operator['value']
-                return make_year_term(end_year=value)
-            elif operator['tag'] == 'gt':
-                value = operator['value']
-                return make_year_term(start_year=value)
-            elif operator['tag'] == 'range':
-                lower_bound = operator['lower_bound']
-                upper_bound = operator['upper_bound']
-                return make_year_term(lower_bound,upper_bound)
-            else:
-                raise ValueError('Unknown tag')
-        else:
-            raise ValueError('Unknown tag')
-
     def make_search_given_term(
         term, 
         db='pubmed', 
@@ -536,3 +536,41 @@ async def efetch_on_id_list(
         )
         papers.append(paper_data)
     return papers
+
+
+async def egquery_on_query(
+    query: PubmedESearchQuery,
+    client: ClientSession,
+    api_key: str = None
+) -> Optional[int]:
+    def make_egquery_given_term(
+        term,
+        prefix= 'https://eutils.ncbi.nlm.nih.gov/',
+        api_key = None
+    ):
+        if api_key is None:
+            return f'{prefix}gquery?retmode=xml&term={quote_plus(str(term))}'
+        else:
+            return f'{prefix}gquery?retmode=xml&term={quote_plus(str(term))}&api_key={api_key}'
+
+    term = query_to_term(query.dict()['__root__'])
+    url = make_egquery_given_term(term, api_key= api_key)
+    output = await client.get(url)
+    raw_out = await output.text()
+    proc_out = xml_parse.fromstring(raw_out)
+    count = None
+    for result in proc_out:
+        if result.tag == 'eGQueryResult':
+            for item in result:
+                database_name_optional = item.find('DbName')
+                if database_name_optional is not None:
+                    database_name = database_name_optional.text
+                    if database_name == 'pubmed':
+                        item_count_optional = item.find('Count')
+                        if item_count_optional is not None:
+                            count_text = item_count_optional.text
+                            if count_text is not None:
+                                count = int(count_text)
+
+    return count
+    

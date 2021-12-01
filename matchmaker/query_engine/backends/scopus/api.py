@@ -326,6 +326,27 @@ async def scopus_search_on_query(
         
     return new_results
 
+async def get_scopus_query_no_results(
+    query: ScopusSearchQuery,
+    client: ClientSession,
+    api_key: str,
+    institution_token: str
+) -> int:
+    # Note: View not required here, because number of results is independent of view
+    create_config(api_key, institution_token)
+    term = query_to_term(query.dict()['__root__'])
+
+    no_results = get_no_results('ScopusSearch', term)
+    if no_results is None:
+        request_search = ScopusSearch(term, download = False)
+        store_quota_in_cache(request_search)
+
+        store_no_results(term, request_search)
+        no_results = get_no_results('ScopusSearch', term)
+        if no_results is None:
+            raise RuntimeError
+    return no_results
+
 async def get_scopus_query_no_requests(
     query: ScopusSearchQuery,
     client: ClientSession,
@@ -333,18 +354,8 @@ async def get_scopus_query_no_requests(
     api_key: str,
     institution_token: str
 ) -> int:
-    create_config(api_key, institution_token)
-    term = query_to_term(query.dict()['__root__'])
+    no_results = await get_scopus_query_no_results(query, client, api_key, institution_token)
 
-    no_results = get_no_results('ScopusSearch', term)
-    if no_results is None:
-        request_search = ScopusSearch(term, download = False, view = view)
-        store_quota_in_cache(request_search)
-        # Note: View not required here, because number of results is independent of view
-        store_no_results(term, request_search)
-        no_results = get_no_results('ScopusSearch', term)
-        if no_results is None:
-            raise RuntimeError
     if view == 'COMPLETE':
         return no_results//Length.SCOPUS_COMPLETE_LENGTH +2
     else:
@@ -355,6 +366,9 @@ async def get_scopus_query_remaining_in_cache() -> int:
         return get_remaining_in_cache('ScopusSearch')
     except TypeError:
         return Allowance.SCOPUS_START_ALLOWANCE
+
+
+
 
 async def author_search_on_query(
     query: ScopusAuthorSearchQuery,
@@ -375,7 +389,7 @@ async def author_search_on_query(
             new_authors.append(ScopusAuthorSearchResult.parse_obj(dict_result))
     return new_authors
 
-async def get_author_query_no_requests(
+async def get_author_query_no_results(
     query: ScopusAuthorSearchQuery,
     client: ClientSession,
     api_key: str,
@@ -391,6 +405,15 @@ async def get_author_query_no_requests(
         no_results = get_no_results('AuthorSearch', term)
         if no_results is None:
             raise RuntimeError
+    return no_results
+
+async def get_author_query_no_requests(
+    query: ScopusAuthorSearchQuery,
+    client: ClientSession,
+    api_key: str,
+    institution_token: str
+) -> int:
+    no_results = await get_author_query_no_results(query, client, api_key, institution_token)
     return no_results//Length.AUTHOR_LENGTH +2
 
 async def get_author_query_remaining_in_cache() -> int:
@@ -398,6 +421,7 @@ async def get_author_query_remaining_in_cache() -> int:
         return get_remaining_in_cache('AuthorSearch')
     except TypeError:
         return Allowance.AUTH_START_ALLOWANCE
+
 
 async def affiliation_search_on_query(
     query: AffiliationSearchQuery,
@@ -418,7 +442,7 @@ async def affiliation_search_on_query(
             new_affiliations.append(AffiliationSearchResult.parse_obj(dict_result))
     return new_affiliations
 
-async def get_affiliation_query_no_requests(
+async def get_affiliation_query_no_results(
     query: AffiliationSearchQuery,
     client: ClientSession,
     api_key: str,
@@ -435,6 +459,20 @@ async def get_affiliation_query_no_requests(
         no_results = get_no_results('AffiliationSearch', term)
         if no_results is None:
             raise RuntimeError
+    return no_results
+
+async def get_affiliation_query_no_requests(
+    query: AffiliationSearchQuery,
+    client: ClientSession,
+    api_key: str,
+    institution_token: str
+) -> int:
+    no_results = await get_affiliation_query_no_results(
+        query,
+        client,
+        api_key,
+        institution_token
+    ) 
     return no_results//Length.AFFIL_LENGTH +2
 
 async def get_affiliation_query_remaining_in_cache() -> int:

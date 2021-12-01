@@ -60,6 +60,7 @@ from pydantic import BaseModel, Field
 from pydantic.error_wrappers import ValidationError
 from matchmaker.query_engine.backends.tools import execute_callback_on_tag
 # TODO Use generators to pass information threough all levels
+from matchmaker.query_engine.backends.pubmed.api import egquery_on_query
 
 and_int = And['PubMedAuthorSearchQuery']
 or_int = Or['PubMedAuthorSearchQuery']
@@ -295,7 +296,8 @@ class PaperSearchQueryEngine(
         else:
             overselected_fields = self.available_fields.get_values_overselected(query.selector)
             raise QueryNotSupportedError(overselected_fields)
-        
+        pubmed_search_query = paper_query_to_esearch(query)
+
         async def get_metadata() -> MetadataType:
             def tuple_set_attr(old_tuple: Tuple[int,...], index: int, new_value) -> Tuple[int,...]:
                 if not index < len(old_tuple):
@@ -308,6 +310,8 @@ class PaperSearchQueryEngine(
                 'efetch': (0, None),
                 'elink': (0, None)
             }
+            #no_results = await egquery_on_query(pubmed_search_query, client, self.api_key)
+            #print(no_results)
             if query.selector.any_of_fields(self.efetch_fields):
                 metadata['efetch'] = tuple_set_attr(metadata['efetch'], 0, metadata['efetch'][0] + 1)
             
@@ -322,7 +326,7 @@ class PaperSearchQueryEngine(
                     metadata['efetch'] = tuple_set_attr(metadata['efetch'], 0, metadata['efetch'][0] + 1)
             return metadata
         
-        pubmed_search_query = paper_query_to_esearch(query)
+
 
         async def get_data(client: ClientSession) -> List[PubmedNativeData]:
             async def id_mapper_to_unique_list(id_mapper: Dict[str, Optional[List[str]]]) -> List[str]:

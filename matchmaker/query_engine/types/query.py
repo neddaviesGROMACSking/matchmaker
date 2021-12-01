@@ -1,6 +1,6 @@
 from collections.abc import Container
 from numbers import Real
-from typing import Annotated, Generic, List, Literal, Type, TypeVar, Union
+from typing import Annotated, Generic, List, Literal, Type, TypeVar, Union, Optional
 
 from matchmaker.query_engine.types.data import PaperID, AuthorID, InstitutionID
 from matchmaker.query_engine.types.selector import (
@@ -157,6 +157,7 @@ PaperSearchQueryInner.update_forward_refs()
 class PaperSearchQuery(BaseModel):
     query: PaperSearchQueryInner
     selector: PaperDataSelector = PaperDataAllSelected
+    n_results: Optional[int] = None
 
 and_int = And['AuthorSearchQueryInner']
 or_int = Or['AuthorSearchQueryInner']
@@ -186,7 +187,7 @@ AuthorSearchQueryInner.update_forward_refs()
 class AuthorSearchQuery(BaseModel):
     query: AuthorSearchQueryInner
     selector: AuthorDataSelector = AuthorDataAllSelected
-
+    n_results: Optional[int] = None
 
 and_int = And['InstitutionSearchQueryInner']
 or_int = Or['InstitutionSearchQueryInner']
@@ -208,3 +209,4 @@ InstitutionSearchQueryInner.update_forward_refs()
 class InstitutionSearchQuery(BaseModel):
     query: InstitutionSearchQueryInner
     selector: InstitutionDataSelector = InstitutionDataAllSelected
+    n_results: Optional[int] = None
