@@ -10,7 +10,7 @@ from matchmaker.query_engine.backends.web import (
     RateLimiter,
     WebNativeQuery
 )
-from matchmaker.query_engine.backends import MetadataType
+from matchmaker.query_engine.backends import MetadataType, ProcessDataIter
 from matchmaker.query_engine.backends.scopus.api import (
     AffiliationSearchQuery,
     AffiliationSearchResult,
@@ -191,21 +191,8 @@ def institution_query_to_affiliation(query: InstitutionSearchQuery) -> Affiliati
 
 DataForProcess = TypeVar('DataForProcess')
 ProcessedData = TypeVar('ProcessedData')
-class ScopusProcessedData(AsyncIterator, Generic[DataForProcess, ProcessedData]):
-    _iterator: Iterator[DataForProcess]
-    _processor: Callable[[DataForProcess], Awaitable[ProcessedData]]
-    def __init__(self, iterator: Iterator[DataForProcess], processing_func: Callable[[DataForProcess], Awaitable[ProcessedData]]) -> None:
-        self._iterator = iterator
-        self._processor = processing_func
-        super().__init__()
-    async def __anext__(self):
-        try:
-            next_item = next(self._iterator)
-        except StopIteration:
-            raise StopAsyncIteration
-        return await self._processor(next_item)
-    def __aiter__(self) -> AsyncIterator[DataForProcess]:
-        return self
+class ScopusProcessedData(ProcessDataIter[DataForProcess, ProcessedData]):
+    pass
 
         
     #raise NotImplementedError

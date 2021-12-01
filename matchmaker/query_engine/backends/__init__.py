@@ -78,3 +78,22 @@ class BaseInstitutionSearchQueryEngine(
     BaseBackendQueryEngine[InstitutionSearchQuery, NativeQuery, NativeData, ProcessedData, InstitutionData]
 ):
     pass
+
+
+DataForProcess = TypeVar('DataForProcess')
+ProcessedData = TypeVar('ProcessedData')
+class ProcessDataIter(AsyncIterator, Generic[DataForProcess, ProcessedData]):
+    _iterator: Iterator[DataForProcess]
+    _processor: Callable[[DataForProcess], Awaitable[ProcessedData]]
+    def __init__(self, iterator: Iterator[DataForProcess], processing_func: Callable[[DataForProcess], Awaitable[ProcessedData]]) -> None:
+        self._iterator = iterator
+        self._processor = processing_func
+        super().__init__()
+    async def __anext__(self):
+        try:
+            next_item = next(self._iterator)
+        except StopIteration:
+            raise StopAsyncIteration
+        return await self._processor(next_item)
+    def __aiter__(self) -> AsyncIterator[DataForProcess]:
+        return self

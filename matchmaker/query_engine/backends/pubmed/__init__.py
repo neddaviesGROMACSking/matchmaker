@@ -2,16 +2,17 @@ from asyncio import gather, get_running_loop
 from copy import copy, deepcopy
 from dataclasses import replace
 from pprint import pprint
-from typing import Annotated, Awaitable, Callable, Dict, List, Tuple, Union, Optional, Any
+from typing import Annotated, Awaitable, Callable, Dict, List, Tuple, TypeVar, Union, Optional, Any
 
 from aiohttp import ClientSession
 from matchmaker.query_engine.backend import Backend
-from matchmaker.query_engine.backends import (
-    BaseAuthorSearchQueryEngine,
-    BaseBackendQueryEngine,
-    BasePaperSearchQueryEngine,
+from matchmaker.query_engine.backends import ProcessDataIter
+from matchmaker.query_engine.backends.web import (
+    WebAuthorSearchQueryEngine,
+    WebPaperSearchQueryEngine,
     NewAsyncClient,
     RateLimiter,
+    WebNativeQuery
 )
 from matchmaker.query_engine.backends.exceptions import QueryNotSupportedError
 from matchmaker.query_engine.backends.pubmed.api import (
@@ -202,9 +203,18 @@ async def process_paper_institutions(i):
     return ProcessedData.parse_obj(i_dict)
 
 
+DataForProcess = TypeVar('DataForProcess')
+ProcessedDataNew = TypeVar('ProcessedDataNew')
+class PubmedProcessedData(ProcessDataIter[DataForProcess, ProcessedDataNew]):
+    pass
 
 class PaperSearchQueryEngine(
-        BasePaperSearchQueryEngine[List[PubmedNativeData]]):
+    WebPaperSearchQueryEngine[
+        WebNativeQuery[List[PubmedNativeData]],
+        List[PubmedNativeData], 
+        PubmedProcessedData[PubmedNativeData, PaperData]
+    ]
+):
     api_key:str
     def __init__(self, api_key: str, rate_limiter: RateLimiter = RateLimiter(), *args, **kwargs):
         self.api_key = api_key
@@ -441,7 +451,7 @@ class PaperSearchQueryEngine(
 
         return get_data, get_metadata
 
-    async def _post_process(self, query: PaperSearchQuery, data: List[PubmedNativeData]) -> List[PaperData]:
+    async def _post_process(self, query: PaperSearchQuery, data: List[PubmedNativeData]) -> PubmedProcessedData[PubmedNativeData, PaperData]:
         def process_sub_paper_data(data_dict, selector: SubPaperDataSelector):
             new_data_dict = {}
 
@@ -608,7 +618,7 @@ class PaperSearchQueryEngine(
             if SubPaperDataSelector(keywords = True) in selector:
                 new_data_dict['keywords'] = data_dict['keywords']
             return new_data_dict
-        
+
         selector = query.selector
         model = PaperData.generate_model_from_selector(selector)
         sub_paper_selector = SubPaperDataSelector.parse_obj(selector.dict())
@@ -627,8 +637,8 @@ class PaperSearchQueryEngine(
                 cited_sub_paper_selector = None
         else:
             cited_sub_paper_selector = SubPaperDataSelector.parse_obj(selector.cited_by.dict())
-        
-        def process_paper_data(data):
+
+        async def process_paper_data(data: PubmedNativeData) -> PaperData:
             data_dict = data.dict()
             new_data_dict = process_sub_paper_data(data_dict, sub_paper_selector)
 
@@ -655,19 +665,18 @@ class PaperSearchQueryEngine(
                         new_cited_bys.append(cited_by_paper_dict)
                     new_data_dict['cited_by'] = new_cited_bys
             return model.parse_obj(new_data_dict)
-        
-        new_data = []
-        for i in data:
-            new_data.append(process_paper_data(i))
-        return new_data
+
+
+        data_iter = iter(data)
+        return PubmedProcessedData[PubmedNativeData, PaperData](data_iter, process_paper_data)
 
 
 
 
 
-
+"""
 class AuthorSearchQueryEngine(
-        BaseAuthorSearchQueryEngine[List[PubmedNativeData]]):
+        WebAuthorSearchQueryEngine[List[PubmedNativeData]]):
         
     def __init__(self, api_key, rate_limiter: RateLimiter = RateLimiter(), *args, **kwargs):
         self.api_key = api_key
@@ -887,7 +896,7 @@ class AuthorSearchQueryEngine(
                 'paper_ids': paper_ids
             }))
         return new_data
-
+"""
 
 
 class PubmedBackend(Backend):
@@ -901,7 +910,7 @@ class PubmedBackend(Backend):
             rate_limiter=self.rate_limiter
         )
 
-    def author_search_engine(self) -> AuthorSearchQueryEngine:
+    def author_search_engine(self) -> None:
         raise NotImplementedError
 
     def institution_search_engine(self) -> None:
