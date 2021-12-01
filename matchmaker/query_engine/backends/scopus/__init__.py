@@ -290,9 +290,16 @@ class PaperSearchQueryEngine(
             else:
                 raise NotEnoughRequests()
             cache_remaining: int = await get_scopus_query_remaining_in_cache()
-            return {
-                'scopus_search': (no_requests, cache_remaining)
-            }
+            metadata: MetadataType = MetadataType.parse_obj({
+                'requests': {
+                    'scopus_search': {
+                        'requests_required': no_requests, 
+                        'requests_remaining': cache_remaining
+                    }
+                }
+            })
+            return metadata
+
 
         async def get_data(client: NewAsyncClient) -> List[ScopusSearchResult]:
             cache_remaining = await get_scopus_query_remaining_in_cache()
@@ -567,9 +574,14 @@ class AuthorSearchQueryEngine(
             else:
                 raise NotEnoughRequests()
             cache_remaining = await get_author_query_remaining_in_cache()
-            metadata: MetadataType = {
-                'author_search': (no_requests, cache_remaining)
-            }
+            metadata: MetadataType = MetadataType.parse_obj({
+                'requests': {
+                    'author_search': {
+                        'requests_required': no_requests, 
+                        'requests_remaining': cache_remaining
+                    }
+                }
+            })
             return metadata
         async def get_data(client: NewAsyncClient) -> List[ScopusAuthorSearchResult]:
             cache_remaining = await get_author_query_remaining_in_cache()
@@ -697,10 +709,14 @@ class InstitutionSearchQueryEngine(
             else:
                 raise NotEnoughRequests()
             cache_remaining = await get_affiliation_query_remaining_in_cache()
-
-            metadata: MetadataType = {
-                'affiliation_search': (no_requests, cache_remaining)
-            }
+            metadata: MetadataType = MetadataType.parse_obj({
+                'requests': {
+                    'affiliation_search': {
+                        'requests_required': no_requests, 
+                        'requests_remaining': cache_remaining
+                    }
+                }
+            })
             return metadata
         
         async def get_data(client: NewAsyncClient) -> List[AffiliationSearchResult]:

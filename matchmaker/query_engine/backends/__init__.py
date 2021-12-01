@@ -2,7 +2,7 @@ from asyncio import Future, coroutine, get_running_loop
 import asyncio
 from dataclasses import dataclass
 import time
-from typing import Awaitable, Callable, Dict, Generic, Iterable, Iterator, Optional, Tuple, TypeVar, Any
+from typing import Awaitable, Callable, Dict, Generic, Iterable, Iterator, Optional, Tuple, TypeVar, Any, Union
 import uuid
 
 from aiohttp import ClientSession, TCPConnector
@@ -18,8 +18,19 @@ from matchmaker.query_engine.types.query import (
 )
 import warnings
 from typing import AsyncIterator
+from pydantic import BaseModel
 
-MetadataType = Dict[str, Tuple[int, Optional[int]]]
+class MetadataType(BaseModel):
+    class Requests(BaseModel):
+        class Range(BaseModel):
+            lower_bound: int
+            upper_bound: int
+        requests_required: Union[int, Range]
+        requests_remaining: Optional[int]
+    requests: Dict[str, Requests] = {}
+    no_results: Optional[int] = None
+
+#MetadataType = Dict[str, Tuple[int, Optional[int]]]
 GetMetadata = Callable[[], Awaitable[MetadataType]]
 NativeData = TypeVar('NativeData')
 GetData = TypeVar('GetData', bound = Callable[..., Any])

@@ -299,31 +299,39 @@ class PaperSearchQueryEngine(
         pubmed_search_query = paper_query_to_esearch(query)
 
         async def get_metadata() -> MetadataType:
-            def tuple_set_attr(old_tuple: Tuple[int,...], index: int, new_value) -> Tuple[int,...]:
-                if not index < len(old_tuple):
-                    raise ValueError(f'{index} not in {old_tuple}')
-                tuple_list = list(old_tuple)
-                tuple_list[index] = new_value
-                return tuple(tuple_list)
-            metadata = {
-                'esearch': (1, None),
-                'efetch': (0, None),
-                'elink': (0, None)
-            }
+            esearch_requests = 1
+            efetch_requests = 0
+            elink_requests = 0
+
             #no_results = await egquery_on_query(pubmed_search_query, client, self.api_key)
             #print(no_results)
             if query.selector.any_of_fields(self.efetch_fields):
-                metadata['efetch'] = tuple_set_attr(metadata['efetch'], 0, metadata['efetch'][0] + 1)
-            
+                efetch_requests += 1
+                        
             if query.selector.any_of_fields(self.elink_refs_fields) or query.selector.any_of_fields(self.elink_refs_details_fields):
-                metadata['elink'] = tuple_set_attr(metadata['elink'], 0, metadata['elink'][0] + 1)
+                elink_requests += 1
                 if query.selector.any_of_fields(self.elink_refs_details_fields):
-                    metadata['efetch'] = tuple_set_attr(metadata['efetch'], 0, metadata['efetch'][0] + 1)
-            
+                    efetch_requests +=1
+        
             if query.selector.any_of_fields(self.elink_citeds_fields) or query.selector.any_of_fields(self.elink_citeds_details_fields):
-                metadata['elink'] = tuple_set_attr(metadata['elink'], 0, metadata['elink'][0] + 1)
+                elink_requests += 1
                 if query.selector.any_of_fields(self.elink_citeds_details_fields):
-                    metadata['efetch'] = tuple_set_attr(metadata['efetch'], 0, metadata['efetch'][0] + 1)
+                    efetch_requests +=1
+
+            
+            metadata: MetadataType = MetadataType.parse_obj({
+                'requests':{
+                    'esearch': {
+                        'requests_required': esearch_requests
+                    },
+                    'efetch': {
+                        'requests_required': efetch_requests
+                    },
+                    'elink': {
+                        'requests_required': elink_requests
+                    }
+                }
+            })
             return metadata
         
 

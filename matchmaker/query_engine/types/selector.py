@@ -235,7 +235,20 @@ class BaseSelector(Generic[Selector], BaseModel):
 
     def __and__(self, other: Selector):
         return self.generate_subset_selector(self, other)
-    
+
+    @classmethod
+    def inverted(cls, selector: Selector):
+        def invert_inner(selector_dict):
+            inverted_dict = {}
+            for k, v in selector_dict.items():
+                if v is True or v is False:
+                    inverted_dict[k] = not v
+                elif isinstance(v, dict):
+                    inverted_dict[k] = invert_inner(v)
+            return inverted_dict
+        selector_dict = selector.dict()
+        return invert_inner(selector_dict)
+
     def generate_model(self, base_model: BaseModel, full_model: BaseModel, model_mapper: Dict[str, BaseModel] = {}) -> BaseModel:
         def make_model(model_name, selector_dict, base, fields):
             def check_whole_dict_is_value(s_dict: SelectorDict, value: bool):
