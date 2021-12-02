@@ -24,7 +24,7 @@ paper_search = PaperSearchQuery.parse_obj({
                 'tag': 'author',
                 'operator': {
                     'tag': 'equal',
-                    'value': 'Jeremy Green'
+                    'value': 'Mark Todd'
                 }
             },
             {
@@ -80,15 +80,13 @@ author_search = AuthorSearchQuery.parse_obj({
 
 op_scopus_author_engine = op_scopus_backend.author_search_engine()
 async def main():
-    #data = await op_scopus_query_engine(paper_search)
-    data = await op_scopus_author_engine(author_search)
+    data = await op_scopus_query_engine(paper_search)
+    #data = await op_scopus_author_engine(author_search)
     results = [i async for i in data]
+    print(await data.metadata())
     return results
     #return await op_scopus_author_engine(author_search)
 
 res = asyncio.run(main())
-print(res)
-print(len(res))
-#print([r.topics for r in res])
-
-#print([res.paper_id.doi for res in res])
+#print(res)
+#print(len(res))

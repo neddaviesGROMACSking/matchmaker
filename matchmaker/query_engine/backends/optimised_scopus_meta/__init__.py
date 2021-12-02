@@ -45,15 +45,56 @@ def bin_items(items: List[str], bin_limit: int) -> List[List[str]]:
 Hashables = Union[str, float, int]
 DictType = Dict[str, Union[Hashables, 'ListType', 'DictType']]
 ListType = List[Union[Hashables, 'ListType', 'DictType']]
+def merge_hashable(item1: Hashables, item2: Hashables) -> Hashables:
+    if len(str(item2)) > len(str(item1)):
+        return item1
+    else:
+        # Note: This does assume that for different strings of the same length
+        # in the same paper, it doesn't matter which you choose
+        return item2
+
 def merge_lists(list1: List[Any], list2: List[Any]) -> List[Any]:
-    raise NotImplementedError
-    # TODO Produce list merging algorithm
-    #for item in list1:
-    #    if item is not None and 
+    # TODO Come up with a better to merge these if it becomes an issue
+    return list1 + list2
+    """
+    def i_shares_features_with_j(i,j) -> bool:
+        if isinstance(i, dict) and isinstance(j,dict):
+            for k,v in i.items():
+                for k2,v2 in j.items():
+                    if k2 == k and v ==v2:
+                        return True
+        return False
+    def find_corresponding_in_list2(item,list2):
+        for j in list2:
+            if i_shares_features_with_j(item,j):
+                if isinstance(item, dict):
+                    return merge_dicts(item, j)
+                
+    new_list = []
+    for i in list1:
+
+        for j in list2:
+            assert type(i) == type(j)
+            if i_shares_features_with_j(i,j):
+                if isinstance(i, dict):
+                    new_list.append(merge_dicts(i, j))
+                    break
+                elif isinstance(i, list):
+                    new_list.append(merge_lists(i,j))
+                    break
+                else:
+                    new_list.append(merge_hashable(i,j))
+                    break
+            else:
+                new_list.append(j)
+        new_list.append(i)
+
+    return new_list
+    """
 def merge_dicts(paper1_dict, paper2_dict):
     merged_dict = {}
     for k, v in paper1_dict.items():
-        if k in paper2_dict and paper2_dict[k] is not None:
+        if k in paper2_dict and paper2_dict[k] is not None and v is not None:
             competing_v = paper2_dict[k]
             assert type(v) == type(competing_v)
             if v == competing_v:
@@ -62,19 +103,9 @@ def merge_dicts(paper1_dict, paper2_dict):
                 if isinstance(v, dict):
                     merged_dict[k] = merge_dicts(v, competing_v)
                 elif isinstance(v, list):
-                    if isinstance(competing_v, list):
-                        merged_dict[k] = merge_lists(v, competing_v)
-                    else:
-                        raise ValueError('List found in one paper but not in other')
+                    merged_dict[k] = merge_lists(v, competing_v)
                 else:
-                    len_v = len(str(v))
-                    len_comp_v = len(str(competing_v))
-                    if len_comp_v > len_v:
-                        merged_dict[k] = competing_v
-                    else:
-                        # Note: This does assume that for different strings of the same length
-                        # in the same paper, it doesn't matter which you choose
-                        merged_dict[k] = v
+                    merged_dict[k] = merge_hashable(v, competing_v)
         else:
             merged_dict[k] = v
     for k, v in paper2_dict.items():
@@ -214,11 +245,11 @@ class PaperSearchQueryEngine(
             complete_query.selector = scopus_complete_selector
 
         async def get_metadata() -> MetadataType:
-            if strategy == 'ScopusStandard' or strategy == 'ScopusComplete':
+            if strategy == Strategy.ScopusStandard or strategy == Strategy.ScopusComplete:
                 data_iter = await self.scopus_paper_search(query)
                 metadata = await data_iter.metadata()
                 return metadata
-            elif strategy == 'ScopusCompleteThenPubmed' or strategy == 'ScopusStandardThenPubmed':
+            elif strategy == Strategy.ScopusCompleteThenPubmed or strategy == Strategy.ScopusStandardThenPubmed:
                 scopus_data_iter = await self.scopus_paper_search(complete_query)
                 scopus_metadata = await scopus_data_iter.metadata()
                 # Invarient - pubmed requests are independent of query, only dependent on selector
@@ -247,7 +278,7 @@ class PaperSearchQueryEngine(
                     'no_results': scopus_metadata.no_results
                 })
                 return metadata
-            elif strategy == 'ScopusStandardThenPubmedThenScopusComplete':
+            elif strategy == Strategy.ScopusStandardThenPubmedThenScopusComplete:
                 scopus_data_iter_standard = await self.scopus_paper_search(complete_query)
                 scopus_metadata_standard = await scopus_data_iter_standard.metadata()
 
@@ -430,7 +461,6 @@ class AuthorSearchQueryEngine(
         scopus_author_search: ScopusAuthorSearchQueryEngine,
         scopus_institution_search: ScopusInstitutionSearchQueryEngine
     ) -> None:
-        self.max_entries = SEARCH_MAX_ENTRIES
         self.scopus_paper_search = scopus_paper_search
         self.scopus_author_search = scopus_author_search
         self.scopus_institution_search = scopus_institution_search
@@ -462,22 +492,6 @@ class AuthorSearchQueryEngine(
             'paper_count': True,
             'paper_ids': True
         })
-        self.exclusive_author_fields = AuthorDataSelector.parse_obj({
-                'preferred_name': {
-                    'initials': True
-                },
-                'subjects': {
-                    'name': True,
-                    'paper_count': True
-                },
-                'institution_current': {
-                    'name': True,
-                    'id':{
-                        'scopus_id': True
-                    },
-                    'processed': True
-                }
-            })
         self.paper_fields = AuthorDataSelector.parse_obj({
                 'id':{
                     'scopus_id': True
@@ -649,7 +663,7 @@ class AuthorSearchQueryEngine(
                         'tag': 'authorid',
                         'operator': {
                             'tag': 'equal',
-                            'value': '7404572266'
+                            'value': {'scopus_id': 7404572266}
                         }
                     },
                     'selector': {
@@ -663,17 +677,15 @@ class AuthorSearchQueryEngine(
             
             async def get_unbounded_author_metadata() -> MetadataType:
                 fake_author_metadata = await get_auth_metadata()
-                requests_available = fake_author_metadata.requests['author_search'].requests_available
+                requests_remaining = fake_author_metadata.requests['author_search'].requests_remaining
                 author_metadata = MetadataType.parse_obj({
                     'requests': {
                         'author_search': {
-                            'requests': {
-                                'requests_required': {
-                                    'lower_bound': 0,
-                                    'upper_bound': None
-                                },
-                                'requests_available': requests_available
-                            }
+                            'requests_required': {
+                                'lower_bound': 0,
+                                'upper_bound': None
+                            },
+                            'requests_remaining': requests_remaining
                         }
                     }
                 })
@@ -697,14 +709,14 @@ class AuthorSearchQueryEngine(
                 paper_data_iter = await self.scopus_paper_search(paper_query)
                 paper_metadata = await paper_data_iter.metadata()
                 author_metadata = await get_unbounded_author_metadata()
-                return await merge_metadatas([paper_metadata, author_metadata])
+                return merge_metadatas([paper_metadata, author_metadata])
 
             elif strategy == Strategy.PaperSearchThenInstitutionSearchesThenAuthorSearches:
                 paper_data_iter = await self.scopus_paper_search(paper_query)
                 paper_metadata = await paper_data_iter.metadata()
                 inst_metadatas = await get_inst_metadatas(institution_queries)
                 author_metadata = await get_unbounded_author_metadata()
-                return await merge_metadatas([paper_metadata, author_metadata] + inst_metadatas)
+                return merge_metadatas([paper_metadata, author_metadata] + inst_metadatas)
             else:
                 raise ValueError('Unknown strategy')
 

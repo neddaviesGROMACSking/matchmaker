@@ -23,9 +23,9 @@ from pydantic import BaseModel
 class MetadataType(BaseModel):
     class Requests(BaseModel):
         class Range(BaseModel):
-            lower_bound: int
-            upper_bound: int
-        requests_required: Union[int, Range]
+            lower_bound: Optional[int]
+            upper_bound: Optional[int]
+        requests_required: Optional[Union[int, Range]]
         requests_remaining: Optional[int]
     requests: Dict[str, Requests] = {}
     no_results: Optional[int] = None
