@@ -42,6 +42,47 @@ def bin_items(items: List[str], bin_limit: int) -> List[List[str]]:
     return binned_items
 
 
+Hashables = Union[str, float, int]
+DictType = Dict[str, Union[Hashables, 'ListType', 'DictType']]
+ListType = List[Union[Hashables, 'ListType', 'DictType']]
+def merge_lists(list1: List[Any], list2: List[Any]) -> List[Any]:
+    raise NotImplementedError
+    # TODO Produce list merging algorithm
+    #for item in list1:
+    #    if item is not None and 
+def merge_dicts(paper1_dict, paper2_dict):
+    merged_dict = {}
+    for k, v in paper1_dict.items():
+        if k in paper2_dict and paper2_dict[k] is not None:
+            competing_v = paper2_dict[k]
+            assert type(v) == type(competing_v)
+            if v == competing_v:
+                merged_dict[k] = v
+            else:
+                if isinstance(v, dict):
+                    merged_dict[k] = merge_dicts(v, competing_v)
+                elif isinstance(v, list):
+                    if isinstance(competing_v, list):
+                        merged_dict[k] = merge_lists(v, competing_v)
+                    else:
+                        raise ValueError('List found in one paper but not in other')
+                else:
+                    len_v = len(str(v))
+                    len_comp_v = len(str(competing_v))
+                    if len_comp_v > len_v:
+                        merged_dict[k] = competing_v
+                    else:
+                        # Note: This does assume that for different strings of the same length
+                        # in the same paper, it doesn't matter which you choose
+                        merged_dict[k] = v
+        else:
+            merged_dict[k] = v
+    for k, v in paper2_dict.items():
+        if k not in merged_dict or (merged_dict[k] is None and v is not None):
+            merged_dict[k] = v
+    return merged_dict
+
+
 
 async def get_doi_list_from_data(papers: List[PaperData]) -> List[str]:
     return [paper.paper_id.doi for paper in papers if paper.paper_id.doi is not None]
@@ -347,43 +388,6 @@ class PaperSearchQueryEngine(
         model = PaperData.generate_model_from_selector(query.selector)
         def merge_papers(papers: List[PaperData]) -> PaperData:
             def merge(paper1: PaperData, paper2: PaperData) -> PaperData:
-                DictType = Dict[str, Union[Any, 'DictType']]
-                def merge_lists(list1: List[Any], list2: List[Any]) -> List[Any]:
-                    raise NotImplementedError
-                    # TODO Produce list merging algorithm
-                    #for item in list1:
-                    #    if item is not None and 
-                def merge_dicts(paper1_dict: DictType, paper2_dict: DictType):
-                    merged_dict = {}
-                    for k, v in paper1_dict.items():
-                        if k in paper2_dict and paper2_dict[k] is not None:
-                            competing_v = paper2_dict[k]
-                            if v == competing_v:
-                                merged_dict[k] = v
-                            else:
-                                if isinstance(v, dict):
-                                    merged_dict[k] = merge_dicts(v, competing_v)
-                                elif isinstance(v, list):
-                                    if isinstance(competing_v, list):
-                                        merged_dict[k] = merge_lists(v, competing_v)
-                                    else:
-                                        raise ValueError('List found in one paper but not in other')
-                                else:
-                                    len_v = len(str(v))
-                                    len_comp_v = len(str(competing_v))
-                                    if len_comp_v > len_v:
-                                        merged_dict[k] = competing_v
-                                    else:
-                                        # Note: This does assume that for different strings of the same length
-                                        # in the same paper, it doesn't matter which you choose
-                                        merged_dict[k] = v
-                        else:
-                            merged_dict[k] = v
-                    for k, v in paper2_dict.items():
-                        if k not in merged_dict or (merged_dict[k] is None and v is not None):
-                            merged_dict[k] = v
-                    return merged_dict
-
                 paper1_dict = paper1.dict()
                 paper2_dict = paper2.dict()
                 merged_dict = merge_dicts(paper1_dict, paper2_dict)
@@ -922,11 +926,34 @@ class AuthorSearchQueryEngine(
 
         return get_data, get_metadata
 
-    async def _post_process(self, query: AuthorSearchQuery, data: List[AuthorData]) -> List[AuthorData]:
-        raise NotImplementedError
+    async def _post_process(self, query: AuthorSearchQuery, data: AsyncIterator[AuthorData]) -> AsyncIterator[AuthorData]:
+        def merge_authors(authors: List[AuthorData]) -> AuthorData:
+            def merge(author1: AuthorData, author2: AuthorData) -> AuthorData:
+                author1_dict = author1.dict()
+                author2_dict = author2.dict()
+                merged_dict = merge_dicts(author1_dict, author2_dict)
+                return model.parse_obj(merged_dict)
+
+            if len(authors) ==1:
+                return model.parse_obj(authors[0].dict())
+            else:
+                return reduce(lambda x, y: merge(x,y), authors)
         model = AuthorData.generate_model_from_selector(query.selector)
-        output = [model.parse_obj(i.dict()) for i in data]
-        return output
+        new_data = []
+        id_log = []
+        raw_results = [i async for i in data]
+        for i in raw_results:
+            if i.id not in id_log:
+                matching_authors = [j for j in raw_results if j.id == i.id]
+                if len(matching_authors) >= 1:
+                    new_author = merge_authors(matching_authors)
+                else:
+                    raise ValueError('Author not found')
+                id_log.append(new_author.id)
+                new_data.append(new_author)
+        data_iter = iter(new_data)
+
+        return CombinedIterator(sync_iterators= [data_iter])
 
 
 class OptimisedScopusBackend(Backend):
