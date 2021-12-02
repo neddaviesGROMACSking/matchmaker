@@ -522,7 +522,7 @@ class AuthorSearchQueryEngine(
         ]
 
 
-    async def _query_to_awaitable(self, query: AuthorSearchQuery) -> Tuple[Callable[[], Awaitable[List[AuthorData]]], Dict[str, int]]:
+    async def _query_to_awaitable(self, query: AuthorSearchQuery) -> Tuple[Callable[[], Awaitable[AsyncIterator[AuthorData]]], Callable[[], Awaitable[MetadataType]]]:
         """
         if one of the standard fields is asked for, 
         """
@@ -579,6 +579,30 @@ class AuthorSearchQueryEngine(
                     strategy = Strategy.PaperSearchThenInstitutionSearchesThenAuthorSearches
         assert strategy is not None
     
+        if (
+            strategy == Strategy.PaperSearch or
+            strategy == Strategy.PaperSearchThenAuthorSearches or
+            strategy == Strategy.PaperSearchThenInstitutionSearches or
+            strategy == Strategy.PaperSearchThenInstitutionSearchesThenAuthorSearches
+        ):
+            required_author_fields = PaperDataSelector.parse_obj({
+                'authors': {
+                    'preferred_name': {
+                        'surname': True,
+                        'given_names': True
+                    },
+                    'id':{
+                        'scopus_id': True
+                    },
+                    'other_institutions': {
+                        'id':{
+                            'scopus_id': True
+                        },
+                    }
+                }
+            })
+            paper_query = author_query_to_paper_query(query, self.scopus_paper_search.available_fields, required_author_fields)
+
         async def get_metadata() -> MetadataType:
             def merge_metadatas(metadatas: List[MetadataType]) -> MetadataType:
                 new_metadata = {'requests': {}}
@@ -656,58 +680,32 @@ class AuthorSearchQueryEngine(
                 data_iter = await self.scopus_author_search(query)
                 return await data_iter.metadata()
             elif strategy == Strategy.PaperSearch:
-                data_iter = await self.scopus_paper_search(query)
+                data_iter = await self.scopus_paper_search(paper_query)
                 return await data_iter.metadata()
             elif strategy == Strategy.PaperSearchThenInstitutionSearches:
-                paper_data_iter = await self.scopus_paper_search(query)
+                paper_data_iter = await self.scopus_paper_search(paper_query)
                 paper_metadata = await paper_data_iter.metadata()
                 inst_metadatas = await get_inst_metadatas(institution_queries)
                 metadatas = [paper_metadata] + inst_metadatas
                 new_metadata = merge_metadatas(metadatas)
                 return new_metadata
             elif strategy == Strategy.PaperSearchThenAuthorSearches:
-                paper_data_iter = await self.scopus_paper_search(query)
+                paper_data_iter = await self.scopus_paper_search(paper_query)
                 paper_metadata = await paper_data_iter.metadata()
                 author_metadata = await get_unbounded_author_metadata()
                 return await merge_metadatas([paper_metadata, author_metadata])
 
             elif strategy == Strategy.PaperSearchThenInstitutionSearchesThenAuthorSearches:
-                paper_data_iter = await self.scopus_paper_search(query)
+                paper_data_iter = await self.scopus_paper_search(paper_query)
                 paper_metadata = await paper_data_iter.metadata()
                 inst_metadatas = await get_inst_metadatas(institution_queries)
                 author_metadata = await get_unbounded_author_metadata()
                 return await merge_metadatas([paper_metadata, author_metadata] + inst_metadatas)
             else:
                 raise ValueError('Unknown strategy')
-            
-        """
-        if (native_author_query is not None) and (native_author_query.metadata['author_search'] < SEARCH_MAX_ENTRIES/25):
-            metadata = native_author_query.metadata
-        else:
-            required_author_fields = PaperDataSelector.parse_obj({
-                'authors': {
-                    'preferred_name': {
-                        'surname': True,
-                        'given_names': True
-                    },
-                    'id':{
-                        'scopus_id': True
-                    },
-                    'other_institutions': {
-                        'id':{
-                            'scopus_id': True
-                        },
-                    }
-                }
-            })
-            paper_query = author_query_to_paper_query(query, self.scopus_paper_search.available_fields, required_author_fields)
-            native_paper_query = await self.scopus_paper_search.get_native_query(paper_query) # actual_request
-            native_paper_query_request_no = native_paper_query.metadata['scopus_search']
-            metadata = native_paper_query.metadata
-            metadata['institution_search'] = 1
-        """
 
-        async def make_coroutine() -> List[AuthorData]:
+
+        async def get_data() -> AsyncIterator[AuthorData]:
             def get_unique_authors(query: AuthorSearchQuery, papers: List[PaperData], inst_mapper: List[Tuple[Any, List[InstitutionData]]]) -> List[AuthorData]:
                 def construct_author_in_query(query: AuthorSearchQuery, inst_mapper: List[Tuple[Any, List[InstitutionData]]]) -> Callable[[AuthorData], Optional[AuthorData]]:
                     def get_all_insts_from_inst_mapper(inst_mapper: List[Tuple[Any, List[InstitutionData]]]) -> List[InstitutionData]:
@@ -851,7 +849,7 @@ class AuthorSearchQueryEngine(
                 inst_mapper = []
                 all_insts = []
                 for institution in institutions:
-                    return_insts = await self.scopus_institution_search(InstitutionSearchQuery.parse_obj({
+                    return_insts_iter = await self.scopus_institution_search(InstitutionSearchQuery.parse_obj({
                         'query': institution,
                         'selector': {
                             'name': True,
@@ -860,42 +858,72 @@ class AuthorSearchQueryEngine(
                             }
                         }
                     })) # actual_request
+                    return_insts = [i async for i in return_insts_iter]
                     inst_mapper.append((institution, return_insts))
                     all_insts += return_insts
                 return inst_mapper
 
-            if (native_author_query is not None) and (native_author_query.metadata['author_search'] < SEARCH_MAX_ENTRIES/25):
-                results = await self.scopus_author_search.get_data_from_native_query(query, native_author_query) # actual_request
-                new_results = results
-            else:
-                results = await self.scopus_paper_search.get_data_from_native_query(paper_query, native_paper_query) # actual_request
-                inst_mapper = await get_institutions_from_query(query) # built in actual_request
-                new_results = get_unique_authors(query, results, inst_mapper)
-                if query.selector not in self.paper_and_institution_fields:
-                    author_ids = [author.id.scopus_id for author in new_results if author.id is not None]
-                    binned_author_ids = bin_items(author_ids, 25)
-                    new_results = []
-                    for id_set in binned_author_ids:
-                        query_dict = {
-                            'query': {
-                                'tag': 'or',
-                                'fields_': [{
-                                    'tag': 'authorid',
-                                    'operator': {
-                                        'tag': 'equal',
-                                        'value': {
-                                            'scopus_id': auth_id
-                                        }
+            async def get_more_author_details(author_ids: List[str]) -> List[AuthorData]:
+                binned_author_ids = bin_items(author_ids, 25)
+                new_results = []
+                for id_set in binned_author_ids:
+                    query_dict = {
+                        'query': {
+                            'tag': 'or',
+                            'fields_': [{
+                                'tag': 'authorid',
+                                'operator': {
+                                    'tag': 'equal',
+                                    'value': {
+                                        'scopus_id': auth_id
                                     }
-                                } for auth_id in id_set]
-                            },
-                            'selector': query.selector.dict()
-                        }
-                        new_results += await self.scopus_author_search(AuthorSearchQuery.parse_obj(query_dict)) # actual_request
-            return new_results
-        return make_coroutine, metadata
+                                }
+                            } for auth_id in id_set]
+                        },
+                        'selector': query.selector.dict()
+                    }
+                    results_iter = await self.scopus_author_search(AuthorSearchQuery.parse_obj(query_dict))
+                    new_results += [i async for i in results_iter]
+                return new_results
+
+            if strategy == Strategy.AuthorSearch:
+                return await self.scopus_author_search(query)
+            elif strategy == Strategy.PaperSearch:
+                paper_data_iter = await self.scopus_paper_search(paper_query)
+                paper_data = [i async for i in paper_data_iter]
+                new_results = get_unique_authors(query, paper_data, [])
+                return CombinedIterator(sync_iterators=[iter(new_results)])
+
+            elif strategy == Strategy.PaperSearchThenInstitutionSearches:
+                paper_data_iter = await self.scopus_paper_search(paper_query)
+                paper_data = [i async for i in paper_data_iter]
+                inst_mapper = await get_institutions_from_query(query)
+                new_results = get_unique_authors(query, paper_data, inst_mapper)
+                return CombinedIterator(sync_iterators=[iter(new_results)])
+            
+            elif strategy == Strategy.PaperSearchThenAuthorSearches:
+                paper_data_iter = await self.scopus_paper_search(paper_query)
+                paper_data = [i async for i in paper_data_iter]
+                new_results = get_unique_authors(query, paper_data, [])
+                author_ids = [author.id.scopus_id for author in new_results if author.id is not None]
+                more_details = await get_more_author_details(author_ids)
+                return CombinedIterator(sync_iterators=[iter(new_results+more_details)])
+
+            elif strategy == Strategy.PaperSearchThenInstitutionSearchesThenAuthorSearches:
+                paper_data_iter = await self.scopus_paper_search(paper_query)
+                paper_data = [i async for i in paper_data_iter]
+                inst_mapper = await get_institutions_from_query(query)
+                new_results = get_unique_authors(query, paper_data, inst_mapper)
+                author_ids = [author.id.scopus_id for author in new_results if author.id is not None]
+                more_details = await get_more_author_details(author_ids)
+                return CombinedIterator(sync_iterators=[iter(new_results+more_details)])
+            else:
+                raise ValueError('Unknown strategy')
+
+        return get_data, get_metadata
 
     async def _post_process(self, query: AuthorSearchQuery, data: List[AuthorData]) -> List[AuthorData]:
+        raise NotImplementedError
         model = AuthorData.generate_model_from_selector(query.selector)
         output = [model.parse_obj(i.dict()) for i in data]
         return output
