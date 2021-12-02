@@ -129,13 +129,13 @@ class InstitutionData(BaseData[InstitutionDataSelector]):
 
 class AuthorDataDef(BaseModel):
     class Name(BaseModel):
-        surname: str
+        surname: Optional[str] = None
         given_names: Optional[str] = None
         initials: Optional[str] = None
     class Subject(BaseModel):
-        name: str
-        paper_count: int
-    preferred_name: Name
+        name: Optional[str] = None
+        paper_count: Optional[int] = None
+    preferred_name: Optional[Name] = None
     id: Optional[AuthorIDDef] = None
     name_variants: List[Name] = []
     subjects: List[Subject] = []
@@ -169,10 +169,10 @@ class Topic(BaseModel):
 
 class SubPaperData(BaseModel):
     paper_id: PaperIDDef
-    title: str
-    authors: List[AuthorDataDef]
-    year: Optional[int]
-    source_title: str
+    title: Optional[str] = None
+    authors: List[AuthorDataDef] = []
+    year: Optional[int] = None
+    source_title: Optional[str] = None
     source_title_id: Optional[str] = None
     source_title_abr: Optional[str] = None
     abstract: Optional[Union[str, List[Tuple[Optional[str], Optional[str]]]]] = None

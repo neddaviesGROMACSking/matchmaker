@@ -364,7 +364,7 @@ async def efetch_on_id_list(
         #articles = article_id_list.findall('ArticleId')
         ids_available= {i.attrib['IdType']: i.text for i in article_id_list}
 
-        #pubmed_id = medline_citation.find('PMID').text
+
         article = medline_citation.find('Article')
         if article is None:
             raise ValueError('Article not found')
@@ -498,6 +498,11 @@ async def efetch_on_id_list(
                 ids_available[id_name] = id_value
 
         pubmed_id = ids_available['pubmed']
+        if pubmed_id is None:
+            pubmed_id_opt = medline_citation.find('PMID')
+            if pubmed_id_opt is not None:
+                pubmed_id = pubmed_id_opt.text
+        
         if 'doi' in ids_available:
             doi = ids_available['doi']
         else:

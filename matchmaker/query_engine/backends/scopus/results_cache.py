@@ -24,8 +24,6 @@ def get_no_results(search_name: str, query_string: str) -> Optional[int]:
         return None
 
     try:
-        print(query_string)
-        print(str(hash_string(query_string)))
         no_results = index[str(hash_string(query_string))]
     except KeyError:
         return None
@@ -39,8 +37,6 @@ def store_no_results(query_string: str, results) -> None:
         path_new = str(DEFAULT_PATHS[search_name]) + '/results_cache.csv'
         with open(path_new, 'a+', newline='') as csvfile:
             file_writer = csv.writer(csvfile, delimiter=',')
-            print(query_string)
-            print(str(hash_string(query_string)))
             file_writer.writerow([str(hash_string(query_string)), str(no_results)])
     search_name = results.__class__.__name__
 

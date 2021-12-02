@@ -47,6 +47,10 @@ async def main():
     data = await paper_searcher(paper_search)
     metadata = await data.metadata()
     results = [i async for i in data]
-    return results, metadata
-paper_results, metadata = asyncio.run(main())
-print(metadata)
+    #return results, metadata
+    print(metadata)
+    return metadata
+asyncio.run(main())
+
+#paper_results, metadata = asyncio.run(main())
+#print(metadata)

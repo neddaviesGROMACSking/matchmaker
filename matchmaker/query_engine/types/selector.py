@@ -247,7 +247,9 @@ class BaseSelector(Generic[Selector], BaseModel):
                     inverted_dict[k] = invert_inner(v)
             return inverted_dict
         selector_dict = selector.dict()
-        return invert_inner(selector_dict)
+
+        new_selector_dict = invert_inner(selector_dict)
+        return cls.parse_obj(new_selector_dict)
 
     def generate_model(self, base_model: BaseModel, full_model: BaseModel, model_mapper: Dict[str, BaseModel] = {}) -> BaseModel:
         def make_model(model_name, selector_dict, base, fields):

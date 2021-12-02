@@ -1,6 +1,6 @@
 from matchmaker.matching_engine import StackedAuthorMatrix
 from matchmaker.query_engine.backends.pubmed import PubmedBackend
-from matchmaker.query_engine.backends.scopus import ScopusBackend
+from matchmaker.query_engine.backends.scopus import ScopusBackend, paper_query_to_scopus
 from matchmaker.query_engine.backends.scopus import PaperSearchQueryEngine as ScopusPaperSearchQueryEngine
 from matchmaker.query_engine.backends.scopus import AuthorSearchQueryEngine as ScopusAuthorSearchQueryEngine
 from matchmaker.query_engine.backends.scopus import InstitutionSearchQueryEngine as ScopusInstitutionSearchQueryEngine
@@ -24,6 +24,7 @@ from copy import deepcopy
 from matchmaker.query_engine.backends.metas import MetaNativeQuery, MetaPaperSearchQueryEngine, MetaAuthorSearchQueryEngine
 from matchmaker.query_engine.backends import AsyncProcessDataIter, MetadataType
 from enum import Enum
+from functools import reduce
 DictStructure = Dict[str, Union[str, 'ListStructure', 'DictStructure']]
 ListStructure = List[Union[str, 'ListStructure', 'DictStructure']]
 
@@ -51,10 +52,10 @@ async def get_doi_query_from_list(dois: List[str], selector) -> PaperSearchQuery
             'tag': 'or',
             'fields_': [
                 {
-                    'tag': 'doi',
+                    'tag': 'id',
                     'operator': {
                         'tag': 'equal',
-                        'value': i
+                        'value': {'doi': i}
                     }
                 } for i in dois
             ]
@@ -152,21 +153,22 @@ class PaperSearchQueryEngine(
         else:
             raise ValueError('Fields set as available but no strategy supported')
 
+        all_ids_selector = PaperDataSelector.parse_obj({'paper_id': True})
         if (
-            strategy == 'ScopusCompleteThenPubmed' 
-            or strategy == 'ScopusStandardThenPubmed'
-            or strategy == 'ScopusStandardThenPubmedThenScopusComplete'
+            strategy == Strategy.ScopusCompleteThenPubmed 
+            or strategy == Strategy.ScopusStandardThenPubmed
+            or strategy == Strategy.ScopusStandardThenPubmedThenScopusComplete
         ):
-            pubmed_selector = query.selector & self.pubmed_paper_search.available_fields
+            pubmed_selector = (all_ids_selector | query.selector) & self.pubmed_paper_search.available_fields
         if (
-            strategy == 'ScopusStandardThenPubmed'
-            or strategy == 'ScopusStandardThenPubmedThenScopusComplete'
+            strategy == Strategy.ScopusStandardThenPubmed
+            or strategy == Strategy.ScopusStandardThenPubmedThenScopusComplete
         ):
-            scopus_standard_selector = (query.selector & scopus_standard_fields) | self.doi_selector
+            scopus_standard_selector = (all_ids_selector | query.selector) & scopus_standard_fields
             standard_query = deepcopy(query)
             standard_query.selector = scopus_standard_selector
-        if strategy == 'ScopusCompleteThenPubmed' or strategy == 'ScopusStandardThenPubmedThenScopusComplete':
-            scopus_complete_selector = (query.selector & scopus_complete_fields) | self.doi_selector
+        if strategy == Strategy.ScopusCompleteThenPubmed or strategy == Strategy.ScopusStandardThenPubmedThenScopusComplete:
+            scopus_complete_selector = (all_ids_selector | query.selector) & scopus_complete_fields
             complete_query = deepcopy(query)
             complete_query.selector = scopus_complete_selector
 
@@ -261,11 +263,11 @@ class PaperSearchQueryEngine(
             If you select fields from pubmed you get just pubmed results
             If you select fields from scopus you get just scopus results
             """
-            if strategy == 'ScopusStandard' or strategy == 'ScopusComplete':
-                return self.scopus_paper_search(query)
-            elif strategy == 'ScopusCompleteThenPubmed':
+            if strategy == Strategy.ScopusStandard or strategy == Strategy.ScopusComplete:
+                return await self.scopus_paper_search(query)
+            elif strategy == Strategy.ScopusCompleteThenPubmed:
                 # Step 1 - get complete results
-                scopus_complete_data_async_iter = self.scopus_paper_search(complete_query)
+                scopus_complete_data_async_iter = await self.scopus_paper_search(complete_query)
                 # Step 2 - get pubmed results for these ids
                 scopus_complete_data = [i async for i in scopus_complete_data_async_iter]
                 scopus_complete_data_iter = iter(scopus_complete_data)
@@ -273,9 +275,9 @@ class PaperSearchQueryEngine(
                 doi_query_pubmed = await get_doi_query_from_list(doi_list_scopus, pubmed_selector)
                 pubmed_data_iter = await self.pubmed_paper_search(doi_query_pubmed)
                 return CombinedIterator([pubmed_data_iter], [scopus_complete_data_iter])
-            elif strategy == 'ScopusStandardThenPubmed':
+            elif strategy == Strategy.ScopusStandardThenPubmed:
                 # Step 1 - get standard results
-                scopus_standard_data_async_iter = self.scopus_paper_search(standard_query)
+                scopus_standard_data_async_iter = await self.scopus_paper_search(standard_query)
                 # Step 2 - get pubmed results for these ids
                 scopus_standard_data = [i async for i in scopus_standard_data_async_iter]
                 scopus_standard_data_iter = iter(scopus_standard_data)
@@ -283,9 +285,9 @@ class PaperSearchQueryEngine(
                 doi_query_pubmed = await get_doi_query_from_list(doi_list_scopus, pubmed_selector)
                 pubmed_data_iter = await self.pubmed_paper_search(doi_query_pubmed)
                 return CombinedIterator([pubmed_data_iter], [scopus_standard_data_iter])
-            elif strategy == 'ScopusStandardThenPubmedThenScopusComplete':
+            elif strategy == Strategy.ScopusStandardThenPubmedThenScopusComplete:
                 # Step 1 - get standard results
-                scopus_standard_data_async_iter = self.scopus_paper_search(standard_query)
+                scopus_standard_data_async_iter = await self.scopus_paper_search(standard_query)
                 # Step 2 - get pubmed results for these ids
                 scopus_standard_data = [i async for i in scopus_standard_data_async_iter]
                 scopus_standard_data_iter = iter(scopus_standard_data)
@@ -294,11 +296,10 @@ class PaperSearchQueryEngine(
                 pubmed_data_async_iter = await self.pubmed_paper_search(doi_query_pubmed)
                 pubmed_data = [i async for i in pubmed_data_async_iter]
                 pubmed_data_iter = iter(pubmed_data)
-
                 doi_list_pubmed = await get_doi_list_from_data(pubmed_data)
                 dois_remaining = await get_dois_remaining(doi_list_scopus, doi_list_pubmed)
                 complete_no_requests = len(dois_remaining)//25 +2
-
+                
                 # Step 3 - get estimate for returning to scopus for more info
                 #pubmed will do same as always number of requests!
                 #But nature of the query depends upon the results of standard_native_data
@@ -313,17 +314,22 @@ class PaperSearchQueryEngine(
                 else:
                     #split doi list into blocks of 25 (25 per request),
                     # to reduce url length per length
+                    
                     binned_dois = bin_items(dois_remaining, 25)
-
+                    
                     async def get_paper_data_from_dois(dois):
                         doi_query_scopus = await get_doi_query_from_list(dois, complete_query.selector)
                         return await self.scopus_paper_search(doi_query_scopus)
+                    
                     results = await gather(*list(map(get_paper_data_from_dois, binned_dois)))
+                    
                     concat_results = []
                     for i in results:
-                        concat_results += i
-                    results_iter = iter(concat_results)
+                        total = [data async for data in i]
+                        concat_results += total
 
+                    results_iter = iter(concat_results)
+                    
                     return CombinedIterator(
                         sync_iterators = [
                             scopus_standard_data_iter, 
@@ -331,32 +337,86 @@ class PaperSearchQueryEngine(
                             results_iter
                         ]
                     )
-
+                    
             else:
                 raise ValueError('Unknown strategy')
 
         return get_data, get_metadata
 
     async def _post_process(self, query: PaperSearchQuery, data: AsyncIterator) -> CombinedIterator:
-        def merge_papers(paper: List[PaperData]) -> PaperData:
-            # Not necessary yet as union search currently not possible
-            raise NotImplementedError
         model = PaperData.generate_model_from_selector(query.selector)
+        def merge_papers(papers: List[PaperData]) -> PaperData:
+            def merge(paper1: PaperData, paper2: PaperData) -> PaperData:
+                DictType = Dict[str, Union[Any, 'DictType']]
+                def merge_lists(list1: List[Any], list2: List[Any]) -> List[Any]:
+                    raise NotImplementedError
+                    # TODO Produce list merging algorithm
+                    #for item in list1:
+                    #    if item is not None and 
+                def merge_dicts(paper1_dict: DictType, paper2_dict: DictType):
+                    merged_dict = {}
+                    for k, v in paper1_dict.items():
+                        if k in paper2_dict and paper2_dict[k] is not None:
+                            competing_v = paper2_dict[k]
+                            if v == competing_v:
+                                merged_dict[k] = v
+                            else:
+                                if isinstance(v, dict):
+                                    merged_dict[k] = merge_dicts(v, competing_v)
+                                elif isinstance(v, list):
+                                    if isinstance(competing_v, list):
+                                        merged_dict[k] = merge_lists(v, competing_v)
+                                    else:
+                                        raise ValueError('List found in one paper but not in other')
+                                else:
+                                    len_v = len(str(v))
+                                    len_comp_v = len(str(competing_v))
+                                    if len_comp_v > len_v:
+                                        merged_dict[k] = competing_v
+                                    else:
+                                        # Note: This does assume that for different strings of the same length
+                                        # in the same paper, it doesn't matter which you choose
+                                        merged_dict[k] = v
+                        else:
+                            merged_dict[k] = v
+                    for k, v in paper2_dict.items():
+                        if k not in merged_dict or (merged_dict[k] is None and v is not None):
+                            merged_dict[k] = v
+                    return merged_dict
+
+                paper1_dict = paper1.dict()
+                paper2_dict = paper2.dict()
+                merged_dict = merge_dicts(paper1_dict, paper2_dict)
+                return model.parse_obj(merged_dict)
+
+            if len(papers) ==1:
+                return model.parse_obj(papers[0].dict())
+            else:
+                return reduce(lambda x, y: merge(x,y), papers)
+
         new_data = []
         id_log = []
-        async for i in data:
-            matching_papers = [j async for j in data if j.paper_id == i.paper_id]
-            if len(matching_papers) != 1:
-                new_paper = merge_papers(matching_papers)
-            else:
-                new_paper = matching_papers[0]
-            id_log.append(new_paper.paper_id)
-            new_data.append(new_paper)
+        raw_results = [i async for i in data]
+        for i in raw_results:
+            if i.paper_id not in id_log:
+                matching_papers = [j for j in raw_results if j.paper_id == i.paper_id]
+                if len(matching_papers) >= 1:
+                    new_paper = merge_papers(matching_papers)
+                else:
+                    raise ValueError('Paper not found')
+                id_log.append(new_paper.paper_id)
+                new_data.append(new_paper)
         data_iter = iter(new_data)
         return CombinedIterator(sync_iterators= [data_iter])
 
 
-class AuthorSearchQueryEngine(MetaAuthorSearchQueryEngine[List[AuthorData]]):
+class AuthorSearchQueryEngine(
+        MetaAuthorSearchQueryEngine[
+            MetaNativeQuery[AsyncIterator[AuthorData]],
+            AsyncIterator[AuthorData], 
+            ProcessedMeta[AuthorData, AuthorData]
+        ]
+    ):
     scopus_paper_search: ScopusPaperSearchQueryEngine
     scopus_author_search: ScopusAuthorSearchQueryEngine
     scopus_institution_search: ScopusInstitutionSearchQueryEngine
