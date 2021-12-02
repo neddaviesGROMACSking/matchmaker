@@ -432,8 +432,7 @@ class AuthorSearchQueryEngine(
         self.scopus_institution_search = scopus_institution_search
         self.available_fields = AuthorDataSelector.parse_obj({
             'id':{
-                'scopus_id': True,
-                'pubmed_id': True
+                'scopus_id': True
             },
             'preferred_name':{
                 'surname': True,
@@ -447,18 +446,37 @@ class AuthorSearchQueryEngine(
             'institution_current': {
                 'name': True,
                 'id':{
-                    'scopus_id': True,
-                    'pubmed_id': True
+                    'scopus_id': True
                 },
                 'processed': True
+            },
+            'other_institutions': {
+                'id': {
+                    'scopus_id': True
+                }
             },
             'paper_count': True,
             'paper_ids': True
         })
-        self.paper_and_institution_fields = AuthorDataSelector.parse_obj({
+        self.exclusive_author_fields = AuthorDataSelector.parse_obj({
+                'preferred_name': {
+                    'initials': True
+                },
+                'subjects': {
+                    'name': True,
+                    'paper_count': True
+                },
+                'institution_current': {
+                    'name': True,
+                    'id':{
+                        'scopus_id': True
+                    },
+                    'processed': True
+                }
+            })
+        self.paper_fields = AuthorDataSelector.parse_obj({
                 'id':{
-                    'scopus_id': True,
-                    'pubmed_id': True
+                    'scopus_id': True
                 },
                 'preferred_name': {
                     'surname': True,
@@ -466,18 +484,16 @@ class AuthorSearchQueryEngine(
                 },
                 'other_institutions': {
                     'id':{
-                        'scopus_id': True,
-                        'pubmed_id': True
-                    },
-                    'name': True,
-                    'processed': True
+                        'scopus_id': True
+                    }
                 },
                 'paper_count': True,
                 'paper_ids': True
             })
+        
         self.possible_searches = [
-            self.scopus_author_search.available_fields,
-            self.paper_and_institution_fields,
+            #self.scopus_author_search.available_fields,
+            #self.paper_and_institution_fields,
             AuthorDataSelector.parse_obj({
                 'id':{
                     'scopus_id': True,
@@ -515,27 +531,156 @@ class AuthorSearchQueryEngine(
             raise QueryNotSupportedError(overselected_fields)
         
         def author_query_to_paper_query(query: AuthorSearchQuery, available_fields: PaperDataSelector, required_fields: PaperDataSelector) -> PaperSearchQuery:
-            query_dict = query.query.dict()
-            selector_dict= query.selector.dict()
-            paper_selector = PaperDataSelector.parse_obj({'authors': selector_dict})
-            new_paper_selector = PaperDataSelector.generate_superset_selector(PaperDataSelector.generate_subset_selector(paper_selector, available_fields), required_fields)
+            paper_selector = PaperDataSelector.parse_obj({'authors': query.selector.dict()})
+            new_paper_selector = (paper_selector & available_fields) | required_fields
             #Since paper queries are a superset of author queries
             return PaperSearchQuery.parse_obj({
-                'query': query_dict,
+                'query': query.query.dict(),
                 'selector': new_paper_selector.dict()
             })
 
-
+        def get_institution_queries(query: AuthorSearchQuery) -> List[Dict[str, Any]]:
+            institutions =[]
+            def store_institution_callback(dict_structure):
+                institutions.append(dict_structure)
+            execute_callback_on_tag(query.dict()['query'], 'institution', store_institution_callback)
+            execute_callback_on_tag(query.dict()['query'], 'institutionid', store_institution_callback)
+            return institutions
+        
+        class Strategy(Enum):
+            AuthorSearch = 'AuthorSearch'
+            PaperSearch = 'PaperSearch'
+            PaperSearchThenInstitutionSearches = 'PaperSearchThenInstitutionSearches'
+            PaperSearchThenAuthorSearches = 'PaperSearchThenAuthorSearches'
+            PaperSearchThenInstitutionSearchesThenAuthorSearches = 'PaperSearchThenInstitutionSearchesThenAuthorSearches'
+        
         if query.selector in self.scopus_author_search.available_fields:
             try:
-                native_author_query = await self.scopus_author_search.get_native_query(query) # actual_request
+                await self.scopus_author_search(query)
+                strategy = Strategy.AuthorSearch
             except ScopusQueryError:
-                native_author_query = None
+                strategy = None
             except TagNotFound:
-                native_author_query = None
+                strategy = None
         else:
-            native_author_query = None
-        
+            strategy = None
+        if strategy is None:
+            institution_queries = get_institution_queries(query)
+            if query.selector in self.paper_fields:
+                if len(institution_queries) == 0:
+                    strategy = Strategy.PaperSearch
+                else:
+                    strategy = Strategy.PaperSearchThenInstitutionSearches
+            
+            else:
+                if len(institution_queries) == 0:
+                    strategy = Strategy.PaperSearchThenAuthorSearches
+                else:
+                    strategy = Strategy.PaperSearchThenInstitutionSearchesThenAuthorSearches
+        assert strategy is not None
+    
+        async def get_metadata() -> MetadataType:
+            def merge_metadatas(metadatas: List[MetadataType]) -> MetadataType:
+                new_metadata = {'requests': {}}
+                for metadata in metadatas:
+                    metadata_dict = metadata.dict()
+                    requests = metadata_dict['requests']
+                    for request, details in requests.items():
+                        if request in new_metadata['requests']:
+                            new_request_details = new_metadata['requests'][request]
+                            reqd = details['requests_required']
+                            new_reqd = new_request_details['requests_required']
+                            new_metadata['requests'][request]['requests_required'] = new_reqd + reqd
+
+                            requests_remaining = details['requests_remaining']
+                            new_requests_remaining = new_request_details['requests_remaining']
+                            new_metadata['requests'][request]['requests_remaining'] = min(requests_remaining, new_requests_remaining)
+                        else:
+                            new_metadata['requests'][request] = details
+                return MetadataType.parse_obj(new_metadata)
+            
+            async def get_inst_metadatas(inst_queries) -> List[MetadataType]:
+                inst_metadatas = []
+                for institution_query in institution_queries:
+                    institution_search = InstitutionSearchQuery.parse_obj({
+                        'query': institution_query,
+                        'selector': {
+                            'name': True,
+                            'id': {
+                                'scopus_id': True
+                            }
+                        }
+                    })
+                    inst_data_iter = await self.scopus_institution_search(institution_search)
+                    inst_metadatas.append(await inst_data_iter.metadata())
+                return inst_metadatas
+            
+            async def get_auth_metadata() -> MetadataType:
+                author_search = AuthorSearchQuery.parse_obj({
+                    'query': {
+                        'tag': 'authorid',
+                        'operator': {
+                            'tag': 'equal',
+                            'value': '7404572266'
+                        }
+                    },
+                    'selector': {
+                        'id': {
+                            'scopus_id': True
+                        }
+                    }
+                })
+                data_iter = await self.scopus_author_search(author_search)
+                return await data_iter.metadata()
+            
+            async def get_unbounded_author_metadata() -> MetadataType:
+                fake_author_metadata = await get_auth_metadata()
+                requests_available = fake_author_metadata.requests['author_search'].requests_available
+                author_metadata = MetadataType.parse_obj({
+                    'requests': {
+                        'author_search': {
+                            'requests': {
+                                'requests_required': {
+                                    'lower_bound': 0,
+                                    'upper_bound': None
+                                },
+                                'requests_available': requests_available
+                            }
+                        }
+                    }
+                })
+                return author_metadata
+
+
+            if strategy == Strategy.AuthorSearch:
+                data_iter = await self.scopus_author_search(query)
+                return await data_iter.metadata()
+            elif strategy == Strategy.PaperSearch:
+                data_iter = await self.scopus_paper_search(query)
+                return await data_iter.metadata()
+            elif strategy == Strategy.PaperSearchThenInstitutionSearches:
+                paper_data_iter = await self.scopus_paper_search(query)
+                paper_metadata = await paper_data_iter.metadata()
+                inst_metadatas = await get_inst_metadatas(institution_queries)
+                metadatas = [paper_metadata] + inst_metadatas
+                new_metadata = merge_metadatas(metadatas)
+                return new_metadata
+            elif strategy == Strategy.PaperSearchThenAuthorSearches:
+                paper_data_iter = await self.scopus_paper_search(query)
+                paper_metadata = await paper_data_iter.metadata()
+                author_metadata = await get_unbounded_author_metadata()
+                return await merge_metadatas([paper_metadata, author_metadata])
+
+            elif strategy == Strategy.PaperSearchThenInstitutionSearchesThenAuthorSearches:
+                paper_data_iter = await self.scopus_paper_search(query)
+                paper_metadata = await paper_data_iter.metadata()
+                inst_metadatas = await get_inst_metadatas(institution_queries)
+                author_metadata = await get_unbounded_author_metadata()
+                return await merge_metadatas([paper_metadata, author_metadata] + inst_metadatas)
+            else:
+                raise ValueError('Unknown strategy')
+            
+        """
         if (native_author_query is not None) and (native_author_query.metadata['author_search'] < SEARCH_MAX_ENTRIES/25):
             metadata = native_author_query.metadata
         else:
@@ -560,7 +705,7 @@ class AuthorSearchQueryEngine(
             native_paper_query_request_no = native_paper_query.metadata['scopus_search']
             metadata = native_paper_query.metadata
             metadata['institution_search'] = 1
-
+        """
 
         async def make_coroutine() -> List[AuthorData]:
             def get_unique_authors(query: AuthorSearchQuery, papers: List[PaperData], inst_mapper: List[Tuple[Any, List[InstitutionData]]]) -> List[AuthorData]:
@@ -702,13 +847,7 @@ class AuthorSearchQueryEngine(
 
 
             async def get_institutions_from_query(query: AuthorSearchQuery) -> List[Tuple[Any, List[InstitutionData]]]:
-
-                institutions =[]
-                def store_institution_callback(dict_structure):
-                    institutions.append(dict_structure)
-                execute_callback_on_tag(query.dict()['query'], 'institution', store_institution_callback)
-                execute_callback_on_tag(query.dict()['query'], 'institutionid', store_institution_callback)
-                
+                institutions = get_institution_queries(query)
                 inst_mapper = []
                 all_insts = []
                 for institution in institutions:
