@@ -21,7 +21,7 @@ from pybliometrics.scopus.utils.constants import SEARCH_MAX_ENTRIES
 from matchmaker.query_engine.backends.tools import TagNotFound, execute_callback_on_tag
 from pybliometrics.scopus.exception import ScopusQueryError
 from copy import deepcopy
-from matchmaker.query_engine.backends.metas import MetaNativeQuery, MetaPaperSearchQueryEngine, MetaAuthorSearchQueryEngine
+from matchmaker.query_engine.backends.metas import CombinedIterator, MetaNativeQuery, MetaPaperSearchQueryEngine, MetaAuthorSearchQueryEngine, ProcessedMeta
 from matchmaker.query_engine.backends import AsyncProcessDataIter, MetadataType
 from enum import Enum
 from functools import reduce
@@ -139,30 +139,7 @@ async def get_doi_query_from_list(dois: List[str], selector) -> PaperSearchQuery
 async def get_dois_remaining(scopus_dois: List[str], pubmed_dois: List[str]) -> List[str]:
     return [doi for doi in scopus_dois if doi not in pubmed_dois]
 
-DataForProcess = TypeVar('DataForProcess')
-ProcessedData = TypeVar('ProcessedData')
-class ProcessedMeta(AsyncProcessDataIter[DataForProcess, ProcessedData]):
-    pass
 
-
-class CombinedIterator(AsyncIterator):
-    def __init__(self, async_iterators: List[AsyncIterator] = [], sync_iterators: List[Iterator] = []) -> None:
-        self._async_iterators = async_iterators
-        self._sync_iterators = sync_iterators
-    def __aiter__(self):
-        return self
-    async def __anext__(self):
-        for i in self._async_iterators:
-            try:
-                return i.__anext__()
-            except StopAsyncIteration:
-                pass
-        for i in self._sync_iterators:
-            try:
-                return i.__next__()
-            except StopIteration:
-                pass
-        raise StopAsyncIteration
 
 
 

@@ -21,10 +21,12 @@ author_search = AuthorSearchQuery.parse_obj({
             }
         ]
     },
-    'selector': {'preferred_name': {'surname': True}, 'institution_current': {'name': True}}
+    'selector': {'preferred_name': {
+        'surname': True,
+        'given_names': True}, 'institution_current': {'name': True}}
 })
 async def main():
-
-    return await engine(author_search)
+    data_iter = await engine(author_search)
+    return [i async for i in data_iter]
 pub_author_results = asyncio.run(main())
 print(pub_author_results)

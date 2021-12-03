@@ -8,6 +8,7 @@ from typing import (
     Callable,
     Dict,
     Generic,
+    Iterator,
     List,
     Optional,
     Tuple,
@@ -17,6 +18,7 @@ from typing import (
 from typing import Awaitable, Callable, Dict, Generic, Optional, Tuple, TypeVar
 
 from matchmaker.query_engine.backends import (
+    AsyncProcessDataIter,
     BaseBackendQueryEngine,
     BaseNativeQuery,
     GetMetadata,
@@ -96,3 +98,30 @@ class MetaInstitutionSearchQueryEngine(
     MetaQueryEngine[InstitutionSearchQuery, NativeQuery, NativeData, ProcessedData, InstitutionData],
 ):
     pass
+
+
+
+DataForProcess = TypeVar('DataForProcess')
+ProcessedData = TypeVar('ProcessedData')
+class ProcessedMeta(AsyncProcessDataIter[DataForProcess, ProcessedData]):
+    pass
+
+
+class CombinedIterator(AsyncIterator):
+    def __init__(self, async_iterators: List[AsyncIterator] = [], sync_iterators: List[Iterator] = []) -> None:
+        self._async_iterators = async_iterators
+        self._sync_iterators = sync_iterators
+    def __aiter__(self):
+        return self
+    async def __anext__(self):
+        for i in self._async_iterators:
+            try:
+                return i.__anext__()
+            except StopAsyncIteration:
+                pass
+        for i in self._sync_iterators:
+            try:
+                return i.__next__()
+            except StopIteration:
+                pass
+        raise StopAsyncIteration

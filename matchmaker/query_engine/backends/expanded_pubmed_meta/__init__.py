@@ -1,3 +1,4 @@
+from matchmaker.query_engine.backends import AsyncProcessDataIter, MetadataType
 from matchmaker.query_engine.backends.pubmed import PubmedBackend, PaperSearchQueryEngine
 from matchmaker.query_engine.backends.scopus import ScopusBackend, InstitutionSearchQueryEngine
 from matchmaker.query_engine.backends.scopus.api import Auth
@@ -8,7 +9,7 @@ from matchmaker.query_engine.types.selector import AuthorDataSelector, PaperData
 from matchmaker.query_engine.slightly_less_abstract import AbstractNativeQuery
 from matchmaker.query_engine.slightly_less_abstract import SlightlyLessAbstractQueryEngine
 from matchmaker.query_engine.backend import Backend
-from typing import Optional, Tuple, Callable, Awaitable, Dict, List, Generic, TypeVar, Union, Any
+from typing import AsyncIterator, Optional, Tuple, Callable, Awaitable, Dict, List, Generic, TypeVar, Union, Any
 from asyncio import get_running_loop, gather
 from matchmaker.query_engine.backends.exceptions import QueryNotSupportedError, SearchNotPossible
 from dataclasses import dataclass
@@ -16,9 +17,10 @@ import pdb
 from pybliometrics.scopus.utils.constants import SEARCH_MAX_ENTRIES
 #from matchmaker.query_engine.backends.exceptions import QueryNotSupportedError
 from matchmaker.query_engine.backends.tools import TagNotFound, execute_callback_on_tag
-from matchmaker.query_engine.backends.metas import BaseAuthorSearchQueryEngine
+from matchmaker.query_engine.backends.metas import BaseAuthorSearchQueryEngine, CombinedIterator, MetaNativeQuery
 from pybliometrics.scopus.exception import ScopusQueryError
 from copy import deepcopy
+from matchmaker.query_engine.backends.metas import MetaAuthorSearchQueryEngine
 
 
 def author_query_to_paper_query(query: AuthorSearchQuery, available_fields: AuthorDataSelector, required_fields: AuthorDataSelector) -> PaperSearchQuery:
@@ -36,9 +38,12 @@ def author_query_to_paper_query(query: AuthorSearchQuery, available_fields: Auth
     })
     return new_query
 
-
 class AuthorSearchQueryEngine(
-    BaseAuthorSearchQueryEngine[List[PaperData]]
+    MetaAuthorSearchQueryEngine[
+        MetaNativeQuery[AsyncIterator[PaperData]],
+        AsyncIterator[PaperData],
+        CombinedIterator
+    ]
 ):
     def __init__(
         self,
@@ -69,19 +74,28 @@ class AuthorSearchQueryEngine(
             },
         })
     
-    async def _query_to_awaitable(self, query: AuthorSearchQuery):
+    async def _query_to_awaitable(
+        self, 
+        query: AuthorSearchQuery
+    ) -> Tuple[
+        Callable[[], Awaitable[AsyncIterator]], 
+        Callable[[], Awaitable[MetadataType]]
+    ]:
         if query.selector not in self.available_fields:
             overselected_fields = self.available_fields.get_values_overselected(query.selector)
             raise QueryNotSupportedError(overselected_fields)
+        
         paper_query = author_query_to_paper_query(query, self.pubmed_paper_search.available_fields.authors, self.required_fields)
-        native_query = await self.pubmed_paper_search.get_native_query(paper_query)
-        async def make_coroutine() -> List[PaperData]:
-            papers = await self.pubmed_paper_search.get_data_from_native_query(paper_query, native_query)
-            return papers
-        return make_coroutine, native_query.metadata
+        
+        async def get_metadata() -> MetadataType:
+            data_iter = await self.pubmed_paper_search(paper_query)
+            return await data_iter.metadata()
 
-    async def _post_process(self, query: AuthorSearchQuery, data: List[PaperData]) -> List[AuthorData]:
-                
+        async def get_data() -> AsyncIterator:
+            return await self.pubmed_paper_search(paper_query)
+        return get_data, get_metadata
+
+    async def _post_process(self, query: AuthorSearchQuery, data: AsyncIterator) -> CombinedIterator:
         def query_to_func(body_institution: str, body_author: str):
             def query_to_term(query):
                 def make_string_term(body_string, q_value, operator):
@@ -180,9 +194,9 @@ class AuthorSearchQueryEngine(
 
         model = AuthorData.generate_model_from_selector(query.selector)
 
-
+        paper_data = [i async for i in data]
         combined_authors = []
-        for result in data:
+        for result in paper_data:
             combined_authors += result.authors
 
         query_dict = query.dict()['query']
@@ -208,7 +222,7 @@ class AuthorSearchQueryEngine(
         for author1 in finals:
             associated_with_author = []
             paper_ids = []
-            for paper in data:
+            for paper in paper_data:
                 author_list = paper.authors
                 for author2 in author_list:
                     if authors_match(author1, author2) and paper not in associated_with_author:
@@ -222,9 +236,7 @@ class AuthorSearchQueryEngine(
                 'paper_ids': paper_ids
             }))
  
-        return new_data
-
-
+        return CombinedIterator(sync_iterators = [iter(new_data)])
 
 
 
