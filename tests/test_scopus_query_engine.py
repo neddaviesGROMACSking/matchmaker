@@ -1,6 +1,6 @@
 import pytest
 from matchmaker.query_engine.backends.scopus import ScopusBackend
-from matchmaker.query_engine.types.query import PaperSearchQuery, Title, EqualPredicate
+from matchmaker.query_engine.types.query import PaperSearchQuery, Title, EqualPredicate, PaperIDHigh
 from matchmaker.query_engine.types.selector import PaperDataSelector, PaperIDSelector
 @pytest.mark.asyncio
 class TestScopusBackend:
@@ -43,18 +43,15 @@ class TestPaperEngine:
        
     async def test_scopus_paper_engine_one_pubmed_id(self, scopus_paper_engine):
         results = await scopus_paper_engine(
-            PaperSearchQuery.parse_obj(
-                {
-                    'query': {
-                        'tag': 'id',
-                        'operator': {
-                            'tag': 'equal',
-                            'value': {
-                                'pubmed_id': '20573701'
-                            }
+            PaperSearchQuery(
+                query= PaperIDHigh(  
+                    operator = EqualPredicate(
+                        value={
+                            'pubmed_id': '20573701'
                         }
-                    }, 
-                    'selector': {'paper_id':{'pubmed_id': True}}}
+                    )
+                ), 
+                selector={'paper_id':{'pubmed_id': True}}
             )
         )
         assert len(results) ==1

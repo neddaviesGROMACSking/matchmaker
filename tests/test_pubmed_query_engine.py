@@ -1,6 +1,6 @@
 import pytest
 from matchmaker.query_engine.backends.pubmed import PubmedBackend
-from matchmaker.query_engine.types.query import PaperSearchQuery
+from matchmaker.query_engine.types.query import PaperSearchQuery, PaperIDHigh, EqualPredicate
 
 @pytest.mark.asyncio
 class TestPubmedBackend:
@@ -23,20 +23,19 @@ class TestPubmedBackend:
 class TestPaperEngine:
     async def test_pubmed_paper_engine_one_id(self, pubmed_paper_engine):
         results = await pubmed_paper_engine(
-            PaperSearchQuery.parse_obj(
-                {
-                    'query': {
-                        'tag': 'id',
-                        'operator': {
-                            'tag': 'equal',
-                            'value': {
-                                'doi': '10.1242/dev.197293'
-                            }
+            PaperSearchQuery(
+                query= PaperIDHigh(  
+                    operator = EqualPredicate(
+                        value={
+                            'doi': '10.1242/dev.197293'
                         }
-                    }, 
-                    'selector': {'paper_id':{'doi': True}}}
+                    )
+                ), 
+                selector= {'paper_id':{'doi': True}}
             )
         )
-        assert len(results) ==1
-        result = results[0]
+
+        results_list = [i async for i in results]
+        assert len(results_list) == 1
+        result = results_list[0]
         assert result.paper_id.doi == '10.1242/dev.197293'
