@@ -40,7 +40,14 @@ paper_search = PaperSearchQuery.parse_obj({
             }
         ]
     },
-    'selector': paper_searcher.available_fields
+    'selector': {
+        'authors':{
+            'preferred_name': {
+                'surname': True,
+                'given_names': True}, 
+            #'institution_current': {'name': True}
+        }
+    }
 })
 
 async def main():
@@ -49,8 +56,9 @@ async def main():
     results = [i async for i in data]
     #return results, metadata
     print(metadata)
-    return metadata
-asyncio.run(main())
+    return results
+results = asyncio.run(main())
 
+print(results)
 #paper_results, metadata = asyncio.run(main())
 #print(metadata)

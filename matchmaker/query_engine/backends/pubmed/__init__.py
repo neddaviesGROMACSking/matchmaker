@@ -410,40 +410,42 @@ class PaperSearchQueryEngine(
                 if fetch_result is None:
                     native_data_dict = {'paper_id': {'pubmed': pubmed_id}}
                 else:
-                    native_data_dict = fetch_result[pubmed_id].dict()
-                
-                if link_result_citeds is not None:
-                    if fetch_result_citeds is None:
-                        references = []
-                        relevant_citeds = link_result_citeds[pubmed_id]
-                        if relevant_citeds is not None:
+                    if pubmed_id in fetch_result:
+                        native_data_dict = fetch_result[pubmed_id].dict()
+                    else:
+                        native_data_dict = {'paper_id': {'pubmed': pubmed_id}}
+                    if link_result_citeds is not None:
+                        if fetch_result_citeds is None:
+                            references = []
+                            relevant_citeds = link_result_citeds[pubmed_id]
+                            if relevant_citeds is not None:
+                                for i in relevant_citeds:
+                                    references.append({'paper_id': {'pubmed': i}})
+                                native_data_dict['references'] = references
+                        else:
+                            references = []
+                            relevant_citeds = fetch_result_citeds[pubmed_id]
                             for i in relevant_citeds:
-                                references.append({'paper_id': {'pubmed': i}})
-                            native_data_dict['references'] = references
-                    else:
-                        references = []
-                        relevant_citeds = fetch_result_citeds[pubmed_id]
-                        for i in relevant_citeds:
-                            native_data_dict['references'] = i.dict()
-                    native_data_dict['references'] = references
+                                native_data_dict['references'] = i.dict()
+                        native_data_dict['references'] = references
 
-                if link_result_refs is not None:
-                    if fetch_result_refs is None:
-                        references = []
-                        relevant_refs = link_result_refs[pubmed_id]
-                        if relevant_refs is not None:
+                    if link_result_refs is not None:
+                        if fetch_result_refs is None:
+                            references = []
+                            relevant_refs = link_result_refs[pubmed_id]
+                            if relevant_refs is not None:
+                                for i in relevant_refs:
+                                    references.append({'paper_id': {'pubmed': i}})
+                                native_data_dict['references'] = references
+                        else:
+                            references = []
+                            relevant_refs = fetch_result_refs[pubmed_id]
                             for i in relevant_refs:
-                                references.append({'paper_id': {'pubmed': i}})
-                            native_data_dict['references'] = references
-                    else:
-                        references = []
-                        relevant_refs = fetch_result_refs[pubmed_id]
-                        for i in relevant_refs:
-                            native_data_dict['references'] = i.dict()
-                    native_data_dict['references'] = references
+                                native_data_dict['references'] = i.dict()
+                        native_data_dict['references'] = references
 
-                native_paper = PubmedNativeData.parse_obj(native_data_dict)
-                native_papers.append(native_paper)
+                    native_paper = PubmedNativeData.parse_obj(native_data_dict)
+                    native_papers.append(native_paper)
 
             return native_papers
 
@@ -522,7 +524,7 @@ class PaperSearchQueryEngine(
                                 }
                             }
                         }) in selector:
-                            if 'given_names' in author_root:
+                            if 'fore_name' in author_root:
                                 new_name['given_names'] = author_root['fore_name']
                             else:
                                 new_name['given_names'] = None
