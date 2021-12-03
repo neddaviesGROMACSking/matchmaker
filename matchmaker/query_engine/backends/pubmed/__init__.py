@@ -1,14 +1,10 @@
-from asyncio import gather, get_running_loop
-from copy import copy, deepcopy
-from dataclasses import replace
-from pprint import pprint
+from copy import deepcopy
 from typing import Annotated, Awaitable, Callable, Dict, List, Tuple, TypeVar, Union, Optional, Any
 
 from aiohttp import ClientSession
 from matchmaker.query_engine.backend import Backend
 from matchmaker.query_engine.backends import MetadataType, ProcessDataIter
 from matchmaker.query_engine.backends.web import (
-    WebAuthorSearchQueryEngine,
     WebPaperSearchQueryEngine,
     NewAsyncClient,
     RateLimiter,
@@ -17,7 +13,6 @@ from matchmaker.query_engine.backends.web import (
 from matchmaker.query_engine.backends.exceptions import QueryNotSupportedError
 from matchmaker.query_engine.backends.pubmed.api import (
     MeshTopic,
-    PubmedAuthor,
     PubmedEFetchData,
     PubmedEFetchQuery,
     PubmedELinkQuery,
@@ -31,33 +26,24 @@ from matchmaker.query_engine.backends.pubmed.processors import (
     ProcessedAuthor,
     ProcessedData,
     ProcessedEFetchData,
-    ProcessedIndividual,
     process_institution,
 )
 from matchmaker.query_engine.backends.tools import replace_dict_tags
-from matchmaker.query_engine.types.data import AuthorData, PaperData
+from matchmaker.query_engine.types.data import PaperData
 from matchmaker.query_engine.types.query import AuthorSearchQuery, PaperSearchQuery
 from matchmaker.query_engine.types.query import (
-    Abstract,
     And,
     AuthorName,
     Institution,
-    Journal,
-    Keyword,
-    Or,
-    StringPredicate,
-    Title,
-    Year,
+    Or
 )
 from matchmaker.query_engine.types.selector import (
     PaperDataAllSelected,
     PaperDataSelector,
     SubPaperDataAllSelected,
-    SubPaperDataSelector,
-    AuthorDataSelector
+    SubPaperDataSelector
 )
 from pydantic import BaseModel, Field
-from pydantic.error_wrappers import ValidationError
 from matchmaker.query_engine.backends.tools import execute_callback_on_tag
 # TODO Use generators to pass information threough all levels
 from matchmaker.query_engine.backends.pubmed.api import egquery_on_query
@@ -681,234 +667,6 @@ class PaperSearchQueryEngine(
 
         data_iter = iter(data)
         return PubmedProcessedData[PubmedNativeData, PaperData](data_iter, process_paper_data)
-
-
-
-
-
-"""
-class AuthorSearchQueryEngine(
-        WebAuthorSearchQueryEngine[List[PubmedNativeData]]):
-        
-    def __init__(self, api_key, rate_limiter: RateLimiter = RateLimiter(), *args, **kwargs):
-        self.api_key = api_key
-        self.available_fields = AuthorDataSelector.parse_obj({
-            'preferred_name': {
-                'surname': True,
-                'given_names': True,
-                'initials': True
-            },
-
-        })
-        super().__init__(rate_limiter, *args, **kwargs)
-
-    async def _query_to_awaitable(self, query: AuthorSearchQuery, client: NewAsyncClient) -> Tuple[
-        Callable[
-            [NewAsyncClient], 
-            Awaitable[List[PubmedNativeData]]
-        ], 
-        Dict[str,int]
-    ]:
-        async def make_coroutine(client: ClientSession) -> List[PubmedNativeData]:
-            pubmed_paper_query = author_query_to_esearch(query)
-            output = await esearch_on_query(pubmed_paper_query, client, api_key=self.api_key)
-            id_list = output.pubmed_id_list
-            output = await efetch_on_id_list(PubmedEFetchQuery(pubmed_id_list = id_list), client, api_key = self.api_key)
-
-            native = [PubmedNativeData.parse_obj(i.dict()) for i in output]
-            return native
-        metadata = {
-            'efetch': 1,
-            'esearch': 1
-        }
-        return make_coroutine, metadata
-
-
-    async def _post_process(self, query: AuthorSearchQuery, data: List[PubmedNativeData]) -> List[AuthorData]:
-        def query_to_func(body_institution, body_author, body_topic):
-            def query_to_term(query):
-                def make_string_term(body_string, q_value, operator):
-                    if operator == 'in':
-                        return q_value.lower() in body_string.lower()
-                    else:
-                        return (
-                                q_value.lower() in body_string.lower().split(' ')
-                            ) or (
-                                body_string.lower() in q_value.lower().split(' ')
-                            )
-                
-                if query['tag'] == 'and':
-                    fields = query['fields_']
-                    return all([query_to_term(field) for field in fields])
-                elif query['tag'] == 'or':
-                    fields = query['fields_']
-                    return any([query_to_term(field) for field in fields])
-                #elif query['tag'] == 'topic':
-                #    operator = query['operator']
-                #    value = operator['value']
-                #    return make_string_term(body_topic, value, operator)
-                elif query['tag'] == 'author':
-                    operator = query['operator']
-                    value = operator['value']
-                    return make_string_term(body_author, value, operator)
-                elif query['tag'] == 'institution':
-                    operator = query['operator']
-                    value = operator['value']
-                    return make_string_term(body_institution, value, operator)
-                else:
-                    raise ValueError('Unknown tag')
-
-            return query_to_term
-
-        def institution_matches(inst1, inst2):
-            match_count = 0
-            if inst1 is None or inst2 is None:
-                if inst2 == inst1:
-                    return True
-                else:
-                    return False
-            for part in inst1:
-
-                if part[1] == 'postcode':
-                    #Extract postcodes from other half
-                    postcodes2 = [i[0] for i in inst2 if i[1] == 'postcode']
-                    #If other half has a postcode, it must match
-                    if len(postcodes2)>0:
-                        if part[0] in postcodes2:
-                            return True
-                        else:
-                            return False
-                if part[1] == 'house':
-                    #Extract houses from other half
-                    houses2 = [i[0] for i in inst2 if i[1] == 'house']
-                    #If other half has a house, it must match
-                    if len(houses2)>0:
-                        for house2 in houses2:
-                            if part[0] in house2 or house2 in part[0]:
-                                return True
-                            else:
-                                return False
-                if part in inst2:
-                    match_count += 1
-            if match_count >= 4:
-                return True
-            else:
-                return False
-
-        def authors_match(author1, author2):
-            proc_institution1 = author1.dict()['__root__']['proc_institution']
-            proc_institution2 = author2.dict()['__root__']['proc_institution']
-            if author1 == author2:
-                return True
-            elif institution_matches(proc_institution1, proc_institution2):
-                return True
-            else:
-                return False
-        def group_by_location(filtered_authors):
-            final_list = []
-            for i in filtered_authors:
-                match_authors = []
-                for j in filtered_authors:
-
-                    if authors_match(i,j) and j not in match_authors:
-                        match_authors.append(j)
-                if match_authors not in final_list:
-                    final_list.append(match_authors)
-            
-            return final_list
-        
-        def pick_largest_from_group(location_groups):
-            finals = []
-            for location_group in location_groups:
-                lens = [len(str(i)) for i in location_group]
-                group_index = lens.index(max(lens))
-                location = location_group[group_index]
-                if location not in finals:
-                    finals.append(location)
-            return finals
-        
-        coroutines = []
-        for i in data:
-            coroutines.append(process_paper_institutions(i))
-        
-        results = await gather(*coroutines)
-
-        combined_authors = []
-        for result in results:
-            combined_authors += result.author_list
-
-        query_dict = query.dict()['query']
-
-        filtered_authors = []
-        for i in combined_authors:
-            author = i.__root__
-            institution = author.institution
-            if isinstance(author, ProcessedIndividual):
-                last_name = author.last_name
-                fore_name = author.fore_name
-                last_is_present = query_to_func(institution, last_name, None)(query_dict)
-                fore_is_present = query_to_func(institution, fore_name, None)(query_dict)
-                is_present = fore_is_present and last_is_present
-            else:
-                collective_name = author.collective_name
-                is_present = query_to_func(institution, collective_name, None)(query_dict)
-            if is_present and i not in filtered_authors:
-                filtered_authors.append(i)
-
-        location_groups = group_by_location(filtered_authors)
-        finals = pick_largest_from_group(location_groups)
-
-        processed_author_data = []
-        for author1 in finals:
-            associated_with_author = []
-            for paper in results:
-                author_list = paper.author_list
-                paper_dict = paper.dict()
-                for author2 in author_list:
-                    if authors_match(author1, author2) and paper_dict not in associated_with_author:
-                        associated_with_author.append(paper_dict)
-            paper_count = len(associated_with_author)
-            processed_author_data.append(
-                ProcessedAuthorData.parse_obj(
-                    {
-                        'author': author1.dict()['__root__'],
-                        'papers': associated_with_author,
-                        'paper_count': paper_count
-                    }
-                )
-            )
-
-        new_data = []
-        for i in processed_author_data:
-            data_dict = i.dict()
-            author_info = data_dict['author']
-            paper_count = data_dict['paper_count']
-            paper_ids = []
-            for i in data_dict['papers']:
-                paper_id = i['paper_id']
-                doi = paper_id['doi']
-                pubmed_id = paper_id['pubmed']
-                paper_ids.append(
-                    {
-                        'doi': doi,
-                        'pubmed_id': pubmed_id
-                    }
-                )
-            new_data.append(AuthorData.parse_obj({
-                'preferred_name': {
-                    'surname': author_info['last_name'],
-                    'given_names': author_info['fore_name'],
-                    'initials': author_info['initials']
-                },
-                'institution_current': {
-                    'name': author_info['institution'],
-                    'processed': author_info['proc_institution']
-                },
-                'paper_count': paper_count,
-                'paper_ids': paper_ids
-            }))
-        return new_data
-"""
 
 
 class PubmedBackend(Backend):

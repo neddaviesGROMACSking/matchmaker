@@ -1,6 +1,6 @@
 import json
 from typing import List, Optional, Union
-from typing import Annotated, Dict, Literal, Tuple
+from typing import Annotated, Dict, Literal
 from urllib.parse import quote_plus
 import xml.etree.ElementTree as xml_parse
 

@@ -1,32 +1,16 @@
-from asyncio import Future, coroutine, get_running_loop
 import asyncio
-from dataclasses import dataclass
 import time
-from typing import (
-    AsyncIterator,
-    Awaitable,
-    Callable,
-    Dict,
-    Generic,
-    Optional,
-    Tuple,
-    TypeVar,
-)
-import uuid
+from typing import AsyncIterator, Awaitable, Callable, Generic, Optional, Tuple, TypeVar
 import warnings
 
 from aiohttp import ClientSession, TCPConnector
 from matchmaker.query_engine.backends import (
+    BaseAuthorSearchQueryEngine,
     BaseBackendQueryEngine,
+    BaseInstitutionSearchQueryEngine,
     BaseNativeQuery,
     BasePaperSearchQueryEngine,
-    BaseAuthorSearchQueryEngine,
-    BaseInstitutionSearchQueryEngine,
-    GetMetadata
-)
-from matchmaker.query_engine.slightly_less_abstract import (
-    AbstractNativeQuery,
-    SlightlyLessAbstractQueryEngine,
+    GetMetadata,
 )
 from matchmaker.query_engine.types.data import AuthorData, InstitutionData, PaperData
 from matchmaker.query_engine.types.query import (

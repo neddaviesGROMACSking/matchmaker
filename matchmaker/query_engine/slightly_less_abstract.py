@@ -1,5 +1,4 @@
-from pydantic import BaseModel
-from typing import AsyncIterator, Awaitable, Callable, Generic, Type, TypeVar, List, Optional
+from typing import AsyncIterator, Awaitable, Callable, Generic, List, Optional, TypeVar
 
 from matchmaker.query_engine.abstract import AbstractQueryEngine
 

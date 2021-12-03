@@ -1,11 +1,16 @@
-from asyncio import Future, coroutine, get_running_loop
-import asyncio
-from dataclasses import dataclass
-import time
-from typing import Awaitable, Callable, Dict, Generic, Iterable, Iterator, Optional, Tuple, TypeVar, Any, Union
-import uuid
+from typing import (
+    Any,
+    AsyncIterator,
+    Awaitable,
+    Callable,
+    Dict,
+    Generic,
+    Iterator,
+    Optional,
+    TypeVar,
+    Union,
+)
 
-from aiohttp import ClientSession, TCPConnector
 from matchmaker.query_engine.slightly_less_abstract import (
     AbstractNativeQuery,
     SlightlyLessAbstractQueryEngine,
@@ -16,9 +21,8 @@ from matchmaker.query_engine.types.query import (
     InstitutionSearchQuery,
     PaperSearchQuery,
 )
-import warnings
-from typing import AsyncIterator
 from pydantic import BaseModel
+
 
 class MetadataType(BaseModel):
     class Requests(BaseModel):

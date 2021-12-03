@@ -14,7 +14,6 @@ from matchmaker.query_engine.backends.scopus.utils import create_config
 from matchmaker.query_engine.types.query import (
     Abstract,
     And,
-    AuthorID,
     Keyword,
     Or,
     StringPredicate,

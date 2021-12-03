@@ -1,25 +1,12 @@
-from matchmaker.query_engine.backends import AsyncProcessDataIter, MetadataType
+from matchmaker.query_engine.backends import MetadataType
 from matchmaker.query_engine.backends.pubmed import PubmedBackend, PaperSearchQueryEngine
-from matchmaker.query_engine.backends.scopus import ScopusBackend, InstitutionSearchQueryEngine
-from matchmaker.query_engine.backends.scopus.api import Auth
-
-from matchmaker.query_engine.types.data import AuthorData, PaperData, InstitutionData
-from matchmaker.query_engine.types.query import AuthorSearchQuery, PaperSearchQuery, InstitutionSearchQuery
-from matchmaker.query_engine.types.selector import AuthorDataSelector, PaperDataSelector, PaperDataAllSelected
-from matchmaker.query_engine.slightly_less_abstract import AbstractNativeQuery
-from matchmaker.query_engine.slightly_less_abstract import SlightlyLessAbstractQueryEngine
+from matchmaker.query_engine.types.data import AuthorData, PaperData
+from matchmaker.query_engine.types.query import AuthorSearchQuery, PaperSearchQuery
+from matchmaker.query_engine.types.selector import AuthorDataSelector
 from matchmaker.query_engine.backend import Backend
-from typing import AsyncIterator, Optional, Tuple, Callable, Awaitable, Dict, List, Generic, TypeVar, Union, Any
-from asyncio import get_running_loop, gather
-from matchmaker.query_engine.backends.exceptions import QueryNotSupportedError, SearchNotPossible
-from dataclasses import dataclass
-import pdb
-from pybliometrics.scopus.utils.constants import SEARCH_MAX_ENTRIES
-#from matchmaker.query_engine.backends.exceptions import QueryNotSupportedError
-from matchmaker.query_engine.backends.tools import TagNotFound, execute_callback_on_tag
-from matchmaker.query_engine.backends.metas import BaseAuthorSearchQueryEngine, CombinedIterator, MetaNativeQuery
-from pybliometrics.scopus.exception import ScopusQueryError
-from copy import deepcopy
+from typing import AsyncIterator, Optional, Tuple, Callable, Awaitable, List
+from matchmaker.query_engine.backends.exceptions import QueryNotSupportedError
+from matchmaker.query_engine.backends.metas import CombinedIterator, MetaNativeQuery
 from matchmaker.query_engine.backends.metas import MetaAuthorSearchQueryEngine
 
 

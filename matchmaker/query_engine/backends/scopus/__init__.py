@@ -1,6 +1,5 @@
 from html import unescape
-from typing import AsyncIterator, Awaitable, Callable, Dict, Generic, Iterator, List, Tuple, Optional, TypeVar
-from matchmaker import query_engine
+from typing import  Awaitable, Callable, List, Tuple, TypeVar
 from matchmaker.query_engine.backend import Backend
 from matchmaker.query_engine.backends.web import (
     WebAuthorSearchQueryEngine,

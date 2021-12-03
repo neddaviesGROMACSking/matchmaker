@@ -1,22 +1,14 @@
 
-from dataclasses import dataclass
-from dataclasses import dataclass
 from typing import (
-    Any,
     AsyncIterator,
     Awaitable,
     Callable,
-    Dict,
     Generic,
     Iterator,
     List,
-    Optional,
     Tuple,
     TypeVar,
-    Union,
 )
-from typing import Awaitable, Callable, Dict, Generic, Optional, Tuple, TypeVar
-
 from matchmaker.query_engine.backends import (
     AsyncProcessDataIter,
     BaseBackendQueryEngine,
@@ -25,11 +17,6 @@ from matchmaker.query_engine.backends import (
     BasePaperSearchQueryEngine,
     BaseAuthorSearchQueryEngine,
     BaseInstitutionSearchQueryEngine
-)
-from matchmaker.query_engine.slightly_less_abstract import AbstractNativeQuery
-from matchmaker.query_engine.slightly_less_abstract import (
-    AbstractNativeQuery,
-    SlightlyLessAbstractQueryEngine,
 )
 from matchmaker.query_engine.types.data import AuthorData, InstitutionData, PaperData
 from matchmaker.query_engine.types.query import (

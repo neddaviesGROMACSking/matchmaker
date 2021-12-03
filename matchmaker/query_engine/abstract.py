@@ -1,5 +1,4 @@
-from pydantic import BaseModel
-from typing import Generic, Type, TypeVar
+from typing import Generic, TypeVar
 
 
 Query = TypeVar('Query')

@@ -1,4 +1,3 @@
-from matchmaker import query_engine
 from pybliometrics.scopus.utils.constants import DEFAULT_PATHS
 import csv
 from typing import Optional

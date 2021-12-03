@@ -1,30 +1,24 @@
-from matchmaker.matching_engine import StackedAuthorMatrix
 from matchmaker.query_engine.backends.pubmed import PubmedBackend
-from matchmaker.query_engine.backends.scopus import ScopusBackend, paper_query_to_scopus
+from matchmaker.query_engine.backends.scopus import ScopusBackend
 from matchmaker.query_engine.backends.scopus import PaperSearchQueryEngine as ScopusPaperSearchQueryEngine
 from matchmaker.query_engine.backends.scopus import AuthorSearchQueryEngine as ScopusAuthorSearchQueryEngine
 from matchmaker.query_engine.backends.scopus import InstitutionSearchQueryEngine as ScopusInstitutionSearchQueryEngine
 
 from matchmaker.query_engine.types.data import AuthorData, PaperData, InstitutionData
 from matchmaker.query_engine.types.query import AuthorSearchQuery, PaperSearchQuery, InstitutionSearchQuery
-from matchmaker.query_engine.types.selector import AuthorDataAllSelected, InstitutionDataSelector, PaperDataSelector, PaperDataAllSelected, AuthorDataSelector
-from matchmaker.query_engine.slightly_less_abstract import AbstractNativeQuery
-from matchmaker.query_engine.slightly_less_abstract import SlightlyLessAbstractQueryEngine
+from matchmaker.query_engine.types.selector import PaperDataSelector, PaperDataAllSelected, AuthorDataSelector
 from matchmaker.query_engine.backend import Backend
-from typing import AsyncIterator, Iterator, Optional, Tuple, Callable, Awaitable, Dict, List, Generic, TypeVar, Union, Any
-from asyncio import get_running_loop, gather
-from matchmaker.query_engine.backends.exceptions import QueryNotSupportedError, SearchNotPossible
-from dataclasses import dataclass
-import pdb
-from pybliometrics.scopus.utils.constants import SEARCH_MAX_ENTRIES
-#from matchmaker.query_engine.backends.exceptions import QueryNotSupportedError
+from typing import AsyncIterator, Optional, Tuple, Callable, Awaitable, Dict, List, Union, Any
+from asyncio import gather
+from matchmaker.query_engine.backends.exceptions import QueryNotSupportedError
 from matchmaker.query_engine.backends.tools import TagNotFound, execute_callback_on_tag
 from pybliometrics.scopus.exception import ScopusQueryError
 from copy import deepcopy
 from matchmaker.query_engine.backends.metas import CombinedIterator, MetaNativeQuery, MetaPaperSearchQueryEngine, MetaAuthorSearchQueryEngine, ProcessedMeta
-from matchmaker.query_engine.backends import AsyncProcessDataIter, MetadataType
+from matchmaker.query_engine.backends import MetadataType
 from enum import Enum
 from functools import reduce
+
 DictStructure = Dict[str, Union[str, 'ListStructure', 'DictStructure']]
 ListStructure = List[Union[str, 'ListStructure', 'DictStructure']]
 

@@ -1,19 +1,8 @@
-from typing import Callable, Union
-from typing import Any, Dict, Generic, List, Optional, Tuple, TypeVar, Union
-import typing
-from typing_extensions import get_origin, get_args
+from copy import copy
+from typing import Callable, Dict, Generic, List, Tuple, TypeVar, Union
+
 from pydantic import BaseModel, create_model
 from pydantic.fields import ModelField
-from copy import copy
-import pdb
-from typing import Callable, Union
-from typing import Any, Dict, Generic, List, Optional, Tuple, TypeVar, Union
-import typing
-from typing_extensions import get_origin, get_args
-from pydantic import BaseModel, create_model
-from pydantic.fields import ModelField
-from copy import copy
-import pdb
 from type_reconstructor import extract_element
 
 
