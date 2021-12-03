@@ -1,6 +1,6 @@
 from matchmaker.query_engine.backends.scopus import AuthorSearchQueryEngine
 from matchmaker.query_engine.types.query import AuthorSearchQuery
-from matchmaker.query_engine.backends import NewAsyncClient, RateLimiter
+from matchmaker.query_engine.backends.web import RateLimiter
 import asyncio
 
 import time
@@ -34,7 +34,8 @@ pub_searcher = AuthorSearchQueryEngine(scopus_api_key,scopus_inst_token, rate_li
 start = time.time()
 async def main():
     query = AuthorSearchQuery.parse_obj(d)
-    proc_result = await pub_searcher(query)
+    proc_result_iter = await pub_searcher(query)
+    proc_result = [i async for i in proc_result_iter]
     return proc_result
 results = asyncio.run(main())
 print(results[0])

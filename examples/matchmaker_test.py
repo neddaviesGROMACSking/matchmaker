@@ -88,8 +88,8 @@ paper_search2 = PaperSearchQuery.parse_obj({
 async def main():
     author1_res = await op_scopus_query_engine(paper_search1)
     author2_res = await op_scopus_query_engine(paper_search2)
-    author1_abs = [res.abstract for res in author1_res if res.abstract is not None]
-    author2_abs = [res.abstract for res in author2_res if res.abstract is not None]
+    author1_abs = [res.abstract async for res in author1_res if res.abstract is not None]
+    author2_abs = [res.abstract async for res in author2_res if res.abstract is not None]
     sims = calculate_set_similarity(
         author1_abs,
         author2_abs,

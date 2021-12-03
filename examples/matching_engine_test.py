@@ -10,6 +10,7 @@ from matchmaker.matching_engine import (
     process_matches,
     save_matches,
 )
+from matchmaker.query_engine.slightly_less_abstract import Data
 from matchmaker.query_engine.backends.optimised_scopus_meta import (
     OptimisedScopusBackend,
 )
@@ -75,7 +76,7 @@ def choose_institution(institution_data: List[InstitutionData]) -> str:
     else:
         return choose_institution_inner(institution_data)
 
-async def get_institution_data_from_name(name:str):
+async def get_institution_data_from_name(name:str) -> Data:
     return await op_scopus_inst(
         InstitutionSearchQuery.parse_obj({
             'query':{
@@ -181,8 +182,10 @@ def make_filename(name1, keyword1, name2, keyword2):
     return '_'.join([new_name1, new_keyword1, 'vs', new_name2, new_keyword2])+'.csv'
 
 async def main():
-    inst_data1 = await get_institution_data_from_name(name1)
-    inst_data2 = await get_institution_data_from_name(name2)
+    inst_data1_iter = await get_institution_data_from_name(name1)
+    inst_data1 = [i async for i in inst_data1_iter]
+    inst_data2_iter = await get_institution_data_from_name(name2)
+    inst_data2 = [i async for i in inst_data2_iter]
     inst_id1 = choose_institution(inst_data1)
     inst_id2 = choose_institution(inst_data2)
     author_query1 = get_author_query_from_id(inst_id1, keyword1)

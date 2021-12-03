@@ -1,7 +1,7 @@
 from matchmaker.query_engine.backends.pubmed import PaperSearchQueryEngine
 from matchmaker.query_engine.types.query import PaperSearchQuery
 from matchmaker.query_engine.backends.pubmed.api import PubmedESearchQuery
-from matchmaker.query_engine.backends import NewAsyncClient, RateLimiter
+from matchmaker.query_engine.backends.web import RateLimiter
 import asyncio
 
 import time

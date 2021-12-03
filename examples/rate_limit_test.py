@@ -1,4 +1,4 @@
-from matchmaker.query_engine.backends import NewAsyncClient
+from matchmaker.query_engine.backends.web import NewAsyncClient
 import asyncio
 
 import time

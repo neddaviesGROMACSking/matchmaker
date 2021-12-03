@@ -84,8 +84,8 @@ inst_search = InstitutionSearchQuery.parse_obj({
 async def main():
     #paper_results = await paper_searcher(paper_search)
     
-    author_results = await author_searcher(author_search)
-   
+    author_results_iter = await author_searcher(author_search)
+    author_results =[i async for i in author_results_iter]
     #inst_results = await inst_searcher(inst_search)
     return author_results
 author_results = asyncio.run(main())

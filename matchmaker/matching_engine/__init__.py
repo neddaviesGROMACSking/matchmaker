@@ -90,7 +90,8 @@ class AbstractToAbstractCorrelationFunction(CorrelationFunction):
                         }
                     }
                 }
-                new_results += await self.paper_query_engine(PaperSearchQuery.parse_obj(query_dict))
+                data_iter = await self.paper_query_engine(PaperSearchQuery.parse_obj(query_dict))
+                new_results += [i async for i in data_iter]
             return group_results_by_author_id(authors_ids, new_results)
 
         author_matrix = np.zeros((len(author_data1), len(author_data2)))
@@ -176,8 +177,10 @@ class MatchingEngine(Generic[AuthorEngine]):
             query = author_query2.query,
             selector = selector2
         )
-        authors_set1 = await self.author_engine(query1_with_selector)
-        authors_set2 = await self.author_engine(query2_with_selector)
+        authors_set1_iter = await self.author_engine(query1_with_selector)
+        authors_set1 = [i async for i in authors_set1_iter]
+        authors_set2_iter = await self.author_engine(query2_with_selector)
+        authors_set2 = [i async for i in authors_set2_iter]
         stacked_matrix = await self._make_stacked_author_matrix(authors_set1, authors_set2)
         return stacked_matrix, authors_set1, authors_set2
 

@@ -1,6 +1,6 @@
 from matchmaker.query_engine.backends.scopus import InstitutionSearchQueryEngine
 from matchmaker.query_engine.types.query import InstitutionSearchQuery
-from matchmaker.query_engine.backends import NewAsyncClient, RateLimiter
+from matchmaker.query_engine.backends.web import RateLimiter
 import asyncio
 
 import time

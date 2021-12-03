@@ -1,6 +1,5 @@
 from matchmaker.query_engine.backends.scopus import ScopusBackend 
 from matchmaker.query_engine.types.query import PaperSearchQuery, AuthorSearchQuery
-from matchmaker.query_engine.backends import NewAsyncClient, RateLimiter
 import asyncio
 
 import time
@@ -58,7 +57,7 @@ async def main():
                         'tag': 'equal',
                         'value': i.id
                     }
-                } for i in auth1_res
+                } async for i in auth1_res
             ]
         },
         'selector': {'authors':{'id': True}, 'abstract': True}
@@ -74,7 +73,7 @@ async def main():
                         'tag': 'equal',
                         'value': i.id
                     }
-                } for i in auth2_res
+                } async for i in auth2_res
             ]
         },
         'selector': {'authors':{'id': True}, 'abstract': True}
@@ -82,7 +81,7 @@ async def main():
 
     pap1_res = await paper_search(auth1_paper_query)
     author1_dict = {}
-    for author in auth1_res:
+    async for author in auth1_res:
         abstracts = get_author_abstracts(author.id, pap1_res)
         if author.preferred_name.given_names is not None:
             name = author.preferred_name.given_names + ' ' + author.preferred_name.surname
@@ -91,7 +90,7 @@ async def main():
         author1_dict[name] = abstracts
     pap2_res = await paper_search(auth2_paper_query)
     author2_dict = {}
-    for author in auth2_res:
+    async for author in auth2_res:
         abstracts = get_author_abstracts(author.id, pap2_res)
         if author.preferred_name.given_names is not None:
             name = author.preferred_name.given_names + ' ' + author.preferred_name.surname
