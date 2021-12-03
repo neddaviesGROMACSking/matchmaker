@@ -40,14 +40,7 @@ paper_search = PaperSearchQuery.parse_obj({
             }
         ]
     },
-    'selector': {
-        'authors':{
-            'preferred_name': {
-                'surname': True,
-                'given_names': True}, 
-            #'institution_current': {'name': True}
-        }
-    }
+    'selector': {'paper_id': {'doi': True}, 'cited_by': paper_searcher.available_fields.dict()['references']}
 })
 
 async def main():

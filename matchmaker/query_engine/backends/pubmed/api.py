@@ -18,23 +18,6 @@ from matchmaker.query_engine.types.query import (
     Year,
 )
 from pydantic import BaseModel, Field
-import xmltodict
-
-def inspect_xml_dict(i):
-    return xmltodict.parse(
-        bytes(
-            xml_parse.tostring(
-                i, 
-                encoding='utf8', 
-                method='xml'
-            )
-        ).decode('unicode_escape')
-    )
-def inspect_xml(i):
-    return json.dumps(
-        inspect_xml_dict(i),
-        indent=2
-    )
 
 #### E Search query def ####
 
@@ -239,28 +222,48 @@ async def elink_on_id_list(
                 return f'{prefix}elink.fcgi?dbfrom=pubmed&linkname={linkname}&id='+'&id='.join(id_list)
             else:
                 return f'{prefix}elink.fcgi?dbfrom=pubmed&linkname={linkname}&api_key={api_key}&id='+'&id='.join(id_list)
+    def get_id_value(link_set) -> Optional[str]:
+        id_list = link_set.find('IdList')
+        if id_list is None:
+            return None
+        else:
+            id_v = id_list.find('Id')
+            if id_v is None:
+                return None
+            else:
+                return id_v.text
+
+    def get_link_ids(link_set) -> Optional[List[str]]:
+        link_set_db = link_set.find('LinkSetDb')
+        if link_set_db is None:
+            return None
+        else:
+            links = link_set_db.findall('Link')
+            new_links = []
+            for link in links:
+                link_id = link.find('Id')
+                if link_id is not None:
+                    new_links.append(link_id.text)
+            if new_links ==[]:
+                return None
+            return new_links
+
+
     id_list = query.pubmed_id_list
     linkname = query.linkname
     url = make_elink_url(id_list, linkname, api_key = api_key)
     output = await client.get(url)
-    print('link')
     raw_references = await output.text()
-    proc_ref = xmltodict.parse(raw_references)
-    link_set = proc_ref['eLinkResult']['LinkSet']
+    print('link')
+
+    proc_out = xml_parse.fromstring(raw_references)
+    link_sets = proc_out.findall('LinkSet')
 
     id_mapper = {}
-    for link in link_set:
-        id_value = link['IdList']['Id']
-        if 'LinkSetDb' in link:
-            link_set_db = link['LinkSetDb']['Link']
-            link_proc = []
-            if isinstance(link_set_db, list):
-                link_proc = [i['Id'] for i in link_set_db]
-            else:
-                link_proc = [link_set_db['Id']]
-            id_mapper[id_value] = link_proc
-        else:
-            id_mapper[id_value] = None
+    for link_set in link_sets:
+        id_value = get_id_value(link_set)
+        id_mapper[id_value] = get_link_ids(link_set)
+    
     return PubmedELinkData(id_mapper = id_mapper)
 
 
@@ -361,7 +364,6 @@ async def efetch_on_id_list(
             raise ValueError('ArticleIdList not found')
         
         
-        #articles = article_id_list.findall('ArticleId')
         ids_available= {i.attrib['IdType']: i.text for i in article_id_list}
 
 

@@ -416,18 +416,17 @@ class PaperSearchQueryEngine(
                         native_data_dict = {'paper_id': {'pubmed': pubmed_id}}
                     if link_result_citeds is not None:
                         if fetch_result_citeds is None:
-                            references = []
+                            cited_bys = []
                             relevant_citeds = link_result_citeds[pubmed_id]
                             if relevant_citeds is not None:
                                 for i in relevant_citeds:
-                                    references.append({'paper_id': {'pubmed': i}})
-                                native_data_dict['references'] = references
+                                    cited_bys.append({'paper_id': {'pubmed': i}})
                         else:
-                            references = []
+                            cited_bys = []
                             relevant_citeds = fetch_result_citeds[pubmed_id]
                             for i in relevant_citeds:
-                                native_data_dict['references'] = i.dict()
-                        native_data_dict['references'] = references
+                                cited_bys.append(i.dict())
+                        native_data_dict['cited_by'] = cited_bys
 
                     if link_result_refs is not None:
                         if fetch_result_refs is None:
@@ -436,12 +435,11 @@ class PaperSearchQueryEngine(
                             if relevant_refs is not None:
                                 for i in relevant_refs:
                                     references.append({'paper_id': {'pubmed': i}})
-                                native_data_dict['references'] = references
                         else:
                             references = []
                             relevant_refs = fetch_result_refs[pubmed_id]
                             for i in relevant_refs:
-                                native_data_dict['references'] = i.dict()
+                                references.append(i.dict())
                         native_data_dict['references'] = references
 
                     native_paper = PubmedNativeData.parse_obj(native_data_dict)
